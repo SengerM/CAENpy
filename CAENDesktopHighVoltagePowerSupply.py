@@ -63,7 +63,15 @@ class CAENDesktopHighVoltagePowerSupplyUSB:
 		self.send_command(BD=BD, CMD=CMD, PAR=PAR, CH=CH, VAL=VAL)
 		return self.read_response()
 	
+	def set_VSET(self, VSET, channel, device=None):
+		try:
+			VSET = float(VSET)
+		except:
+			raise ValueError(f'<voltage> must be a number, received {VSET} of type {type(VSET)}.')
+		self.send_command(CMD='SET', PAR='VSET', VAL=VSET, CH=channel, BD=device)
+
 if __name__ == '__main__':
 	source = CAENDesktopHighVoltagePowerSupplyUSB()
+	source.set_VSET(VSET=99, channel=0)
 	print(source.query(CMD='MON', PAR='VSET', CH=0, BD=0))
 	
