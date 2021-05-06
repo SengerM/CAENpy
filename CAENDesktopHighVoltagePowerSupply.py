@@ -23,7 +23,11 @@ def create_command_string(BD, CMD, PAR, CH=None, VAL=None):
 	command = command[:-1] # Remove the last ','
 	command += '\r\n'
 	return command
-	
+
+def check_successful_response(response_string):
+	if not isinstance(response_string, str):
+		raise TypeError(f'<response_string> must be an instance of <str>, received {response_string} of type {type(response_string)}.')
+	return 'OK' in response_string # According to the user manual, if there was no error the answer always contains an "OK".
 
 class CAENDesktopHighVoltagePowerSupplyUSB:
 	# This class was implemented according to the specifications in the 
@@ -68,7 +72,9 @@ class CAENDesktopHighVoltagePowerSupplyUSB:
 			VSET = float(VSET)
 		except:
 			raise ValueError(f'<voltage> must be a number, received {VSET} of type {type(VSET)}.')
-		self.send_command(CMD='SET', PAR='VSET', VAL=VSET, CH=channel, BD=device)
+		response = self.query(CMD='SET', PAR='VSET', VAL=VSET, CH=channel, BD=device)
+		if check_successful_response(response) == False:
+			raise RuntimeError(f'Error trying to set the voltage. The command to set the voltage was sent but the instrument is not responding with a "success". The response from the instrument is: {response}')
 
 if __name__ == '__main__':
 	source = CAENDesktopHighVoltagePowerSupplyUSB()
