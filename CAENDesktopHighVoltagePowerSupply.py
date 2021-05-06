@@ -75,9 +75,14 @@ class CAENDesktopHighVoltagePowerSupplyUSB:
 		response = self.query(CMD='SET', PAR='VSET', VAL=VSET, CH=channel, BD=device)
 		if check_successful_response(response) == False:
 			raise RuntimeError(f'Error trying to set the voltage. The command to set the voltage was sent but the instrument is not responding with a "success". The response from the instrument is: {response}')
+	
+	def get_VMON(self, channel, device=None):
+		response = self.query(CMD='MON', PAR='VMON', CH=channel, BD=device)
+		if check_successful_response(response) == False:
+			raise RuntimeError(f'Error trying to get the measured voltage. The command to get the voltage was sent but the instrument is not responding with a "success". The response from the instrument is: {response}')
+		return float(response.split('VAL:')[-1])
 
 if __name__ == '__main__':
 	source = CAENDesktopHighVoltagePowerSupplyUSB()
-	source.set_VSET(VSET=99, channel=0)
-	print(source.query(CMD='MON', PAR='VSET', CH=0, BD=0))
+	print(source.get_VMON(channel = 0))
 	
