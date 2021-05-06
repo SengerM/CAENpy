@@ -76,13 +76,22 @@ class CAENDesktopHighVoltagePowerSupplyUSB:
 		if check_successful_response(response) == False:
 			raise RuntimeError(f'Error trying to set the voltage. The command to set the voltage was sent but the instrument is not responding with a "success". The response from the instrument is: {response}')
 	
-	def get_VMON(self, channel, device=None):
-		response = self.query(CMD='MON', PAR='VMON', CH=channel, BD=device)
+	def get_single_channel_parameter(self, parameter: str, channel: int, device: int=None):
+		response = self.query(CMD='MON', PAR=parameter, CH=channel, BD=device)
 		if check_successful_response(response) == False:
-			raise RuntimeError(f'Error trying to get the measured voltage. The command to get the voltage was sent but the instrument is not responding with a "success". The response from the instrument is: {response}')
-		return float(response.split('VAL:')[-1])
+			raise RuntimeError(f'Error trying to get the parameter {parameter}. The response from the instrument is: {response}')
+		parameter_value = response.split('VAL:')[-1]
+		if parameter_value.isdigit(): # This means it only contains numerical values, thus it is an int.
+			return int(parameter_value)
+		try:
+			parameter_value = float(parameter_value)
+		except:
+			pass
+		return parameter_value
+	
 
 if __name__ == '__main__':
 	source = CAENDesktopHighVoltagePowerSupplyUSB()
-	print(source.get_VMON(channel = 0))
+	for parameter in ['IMDEC','MAXV','RUP','POL','STAT','VSET','PDWN']:
+		print(f'{parameter} → {source.get_single_channel_parameter(parameter, 0)}')
 	
