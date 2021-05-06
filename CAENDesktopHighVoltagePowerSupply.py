@@ -67,15 +67,6 @@ class CAENDesktopHighVoltagePowerSupplyUSB:
 		self.send_command(BD=BD, CMD=CMD, PAR=PAR, CH=CH, VAL=VAL)
 		return self.read_response()
 	
-	def set_VSET(self, VSET, channel, device=None):
-		try:
-			VSET = float(VSET)
-		except:
-			raise ValueError(f'<voltage> must be a number, received {VSET} of type {type(VSET)}.')
-		response = self.query(CMD='SET', PAR='VSET', VAL=VSET, CH=channel, BD=device)
-		if check_successful_response(response) == False:
-			raise RuntimeError(f'Error trying to set the voltage. The command to set the voltage was sent but the instrument is not responding with a "success". The response from the instrument is: {response}')
-	
 	def get_single_channel_parameter(self, parameter: str, channel: int, device: int=None):
 		response = self.query(CMD='MON', PAR=parameter, CH=channel, BD=device)
 		if check_successful_response(response) == False:
@@ -89,9 +80,16 @@ class CAENDesktopHighVoltagePowerSupplyUSB:
 			pass
 		return parameter_value
 	
+	def set_single_channel_parameter(self, parameter: str, channel: int, value, device: int=None):
+		response = self.query(CMD='SET', PAR=parameter, CH=channel, BD=device, VAL=value)
+		if check_successful_response(response) == False:
+			raise RuntimeError(f'Error trying to set the parameter {parameter}. The response from the instrument is: {response}')
 
 if __name__ == '__main__':
 	source = CAENDesktopHighVoltagePowerSupplyUSB()
-	for parameter in ['IMDEC','MAXV','RUP','POL','STAT','VSET','PDWN']:
+	for parameter in ['IMON', 'VMON','MAXV','RUP','POL','STAT','VSET','PDWN']:
 		print(f'{parameter} → {source.get_single_channel_parameter(parameter, 0)}')
+	
+	for parameter in ['VSET','ISET','MAXV','IMRANGE']:
+		source.set_single_channel_parameter(parameter, 0, 1)
 	
