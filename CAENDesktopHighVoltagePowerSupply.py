@@ -106,7 +106,7 @@ if __name__ == '__main__':
 	print('Via Ethernet...')
 	source = CAENDesktopHighVoltagePowerSupply(ip='130.60.165.228')
 	for parameter in ['IMON', 'VMON','MAXV','RUP','POL','STAT','VSET','PDWN']:
-		print(f'{parameter} → {source.get_single_channel_parameter(parameter, 0)}')
+		print(f'{parameter} → {source.get_single_channel_parameter(parameter, channel=0)}')
 	
 	# ~ for parameter in ['VSET','ISET','MAXV','IMRANGE']:
 		# ~ source.set_single_channel_parameter(parameter, 0, 1)
