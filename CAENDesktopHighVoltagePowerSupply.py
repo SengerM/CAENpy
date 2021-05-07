@@ -33,7 +33,8 @@ def check_successful_response(response_string):
 class CAENDesktopHighVoltagePowerSupply:
 	# This class was implemented according to the specifications in the 
 	# user manual here: https://www.caen.it/products/dt1470et/
-	def __init__(self, port=None, ip=None, default_BD0=True):
+	def __init__(self, port=None, ip=None, default_BD0=True, timeout=1):
+		# The <timeout> defined the number of seconds to wait until an error is raised if the instrument is not responding. Note that this insturment has the "not nice" behavior that some errors in the commands simply produce a silent answer, instead of reporting an error. For example, if you request the value of a parameter with a "BD" that is not in the daisy-chain, the instrument will give no answer at all, only silence. And you will have to guess what happened.
 		if default_BD0 not in [True, False]:
 			raise ValueError(f'The argument <default_BD0> must be either True of False. Received {default_BD0}.')
 		self.default_BD0 = default_BD0
@@ -43,6 +44,7 @@ class CAENDesktopHighVoltagePowerSupply:
 		elif ip is not None and port is None: # Connect via Ethernet.
 			self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 			self.socket.connect((ip, 1470)) # According to the user manual the port 1470 always has to be used.
+			self.socket.settimeout(timeout)
 		elif port is not None and ip is None: # Connect via USB serial port.
 			self.serial_port = serial.Serial(
 				# This configuration is specified in the user manual.
@@ -52,7 +54,7 @@ class CAENDesktopHighVoltagePowerSupply:
 				stopbits = 1,
 				bytesize = 8,
 				xonxoff = True,
-				timeout = 9,
+				timeout = timeout,
 			)
 		else: # Both <port> and <ip> are none...
 			raise ValueError(f'Please specify a serial port or an IP addres in which the CAEN device can be found.')
@@ -87,7 +89,7 @@ class CAENDesktopHighVoltagePowerSupply:
 	def get_single_channel_parameter(self, parameter: str, channel: int, device: int=None):
 		response = self.query(CMD='MON', PAR=parameter, CH=channel, BD=device)
 		if check_successful_response(response) == False:
-			raise RuntimeError(f'Error trying to get the parameter {parameter}. The response from the instrument is: {response}')
+			raise RuntimeError(f'Error trying to get the parameter {parameter}. The response from the instrument is: "{response}"')
 		parameter_value = response.split('VAL:')[-1]
 		if parameter_value.isdigit(): # This means it only contains numerical values, thus it is an int.
 			return int(parameter_value)
@@ -100,21 +102,21 @@ class CAENDesktopHighVoltagePowerSupply:
 	def set_single_channel_parameter(self, parameter: str, channel: int, value, device: int=None):
 		response = self.query(CMD='SET', PAR=parameter, CH=channel, BD=device, VAL=value)
 		if check_successful_response(response) == False:
-			raise RuntimeError(f'Error trying to set the parameter {parameter}. The response from the instrument is: {response}')
+			raise RuntimeError(f'Error trying to set the parameter {parameter}. The response from the instrument is: "{response}"')
 
 if __name__ == '__main__':
-	print('Via Ethernet...')
+	print('#### Via Ethernet...')
 	source = CAENDesktopHighVoltagePowerSupply(ip='130.60.165.228')
 	for parameter in ['IMON', 'VMON','MAXV','RUP','POL','STAT','VSET','PDWN']:
-		print(f'{parameter} → {source.get_single_channel_parameter(parameter, channel=0)}')
+		print(f'{parameter} → {source.get_single_channel_parameter(parameter, channel=1, device=0)}')
 	
 	# ~ for parameter in ['VSET','ISET','MAXV','IMRANGE']:
 		# ~ source.set_single_channel_parameter(parameter, 0, 1)
 	
-	print('Via USB...')
+	print('#### Via USB...')
 	source = CAENDesktopHighVoltagePowerSupply(port='/dev/ttyACM0')
 	for parameter in ['IMON', 'VMON','MAXV','RUP','POL','STAT','VSET','PDWN']:
-		print(f'{parameter} → {source.get_single_channel_parameter(parameter, 0)}')
+		print(f'{parameter} → {source.get_single_channel_parameter(parameter, 0, device=0)}')
 	
 	# ~ for parameter in ['VSET','ISET','MAXV','IMRANGE']:
 		# ~ source.set_single_channel_parameter(parameter, 0, 1)
