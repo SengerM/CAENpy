@@ -1,4 +1,5 @@
 import serial
+import socket
 import platform
 
 def create_command_string(BD, CMD, PAR, CH=None, VAL=None):
@@ -29,28 +30,32 @@ def check_successful_response(response_string):
 		raise TypeError(f'<response_string> must be an instance of <str>, received {response_string} of type {type(response_string)}.')
 	return 'OK' in response_string # According to the user manual, if there was no error the answer always contains an "OK".
 
-class CAENDesktopHighVoltagePowerSupplyUSB:
+class CAENDesktopHighVoltagePowerSupply:
 	# This class was implemented according to the specifications in the 
 	# user manual here: https://www.caen.it/products/dt1470et/
-	def __init__(self, port=None, default_BD0=True):
+	def __init__(self, port=None, ip=None, default_BD0=True):
 		if default_BD0 not in [True, False]:
 			raise ValueError(f'The argument <default_BD0> must be either True of False. Received {default_BD0}.')
 		self.default_BD0 = default_BD0
-		if port is None:
-			if platform.system() == 'Linux':
-				port = '/dev/ttyACM0' # According to the user manual, this is the default port in most Linux distributions. I am on Ubuntu and it is the case.
-			else:
-				raise ValueError(f'Please specify a serial port in which the CAEN device is connected.')
-		self.serial_port = serial.Serial(
-			# This configuration is specified in the user manual.
-			port = port,
-			baudrate = 9600,
-			parity = serial.PARITY_NONE,
-			stopbits = 1,
-			bytesize = 8,
-			xonxoff = True,
-			timeout = 9,
-		)
+		
+		if ip is not None and port is not None: # This is an error, which connection protocol should we use?
+			raise ValueError(f'You have specified both <port> and <ip>. Please specify only one of them to use.')
+		elif ip is not None and port is None: # Connect via Ethernet.
+			self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+			self.socket.connect((ip, 1470)) # According to the user manual the port 1470 always has to be used.
+		elif port is not None and ip is None: # Connect via USB serial port.
+			self.serial_port = serial.Serial(
+				# This configuration is specified in the user manual.
+				port = port,
+				baudrate = 9600,
+				parity = serial.PARITY_NONE,
+				stopbits = 1,
+				bytesize = 8,
+				xonxoff = True,
+				timeout = 9,
+			)
+		else: # Both <port> and <ip> are none...
+			raise ValueError(f'Please specify a serial port or an IP addres in which the CAEN device can be found.')
 	
 	def send_command(self, CMD, PAR, CH=None, VAL=None, BD=None):
 		if BD is None:
@@ -58,10 +63,22 @@ class CAENDesktopHighVoltagePowerSupplyUSB:
 				BD = 0
 			else:
 				raise ValueError(f'Please specify a value for the <BD> parameter. Refer to the CAEN user manual.')
-		self.serial_port.write(create_command_string(BD=BD, CMD=CMD, PAR=PAR, CH=CH, VAL=VAL).encode('ASCII'))
+		bytes2send = create_command_string(BD=BD, CMD=CMD, PAR=PAR, CH=CH, VAL=VAL).encode('ASCII')
+		if hasattr(self, 'serial_port'): # This means that we are talking through the serial port.
+			self.serial_port.write(bytes2send)
+		elif hasattr(self, 'socket'): # This means that we are talking through an Ethernet connection.
+			self.socket.sendall(bytes2send)
+		else:
+			raise RuntimeError(f'There is no serial or Ethernet communication.')
 	
 	def read_response(self):
-		return self.serial_port.readline().decode('ASCII')[:-2] # Remove the annoying '\r\n' in the end.
+		if hasattr(self, 'serial_port'): # This means that we are talking through the serial port.
+			received_bytes = self.serial_port.readline()
+		elif hasattr(self, 'socket'): # This means that we are talking through an Ethernet connection.
+			received_bytes = self.socket.recv(1024)
+		else:
+			raise RuntimeError(f'There is no serial or Ethernet communication.')
+		return received_bytes.decode('ASCII')[:-2] # Remove the annoying '\r\n' in the end and convert into a string.
 	
 	def query(self, CMD, PAR, CH=None, VAL=None, BD=None):
 		self.send_command(BD=BD, CMD=CMD, PAR=PAR, CH=CH, VAL=VAL)
@@ -86,10 +103,19 @@ class CAENDesktopHighVoltagePowerSupplyUSB:
 			raise RuntimeError(f'Error trying to set the parameter {parameter}. The response from the instrument is: {response}')
 
 if __name__ == '__main__':
-	source = CAENDesktopHighVoltagePowerSupplyUSB()
+	print('Via Ethernet...')
+	source = CAENDesktopHighVoltagePowerSupply(ip='130.60.165.228')
 	for parameter in ['IMON', 'VMON','MAXV','RUP','POL','STAT','VSET','PDWN']:
 		print(f'{parameter} → {source.get_single_channel_parameter(parameter, 0)}')
 	
-	for parameter in ['VSET','ISET','MAXV','IMRANGE']:
-		source.set_single_channel_parameter(parameter, 0, 1)
+	# ~ for parameter in ['VSET','ISET','MAXV','IMRANGE']:
+		# ~ source.set_single_channel_parameter(parameter, 0, 1)
+	
+	print('Via USB...')
+	source = CAENDesktopHighVoltagePowerSupply(port='/dev/ttyACM0')
+	for parameter in ['IMON', 'VMON','MAXV','RUP','POL','STAT','VSET','PDWN']:
+		print(f'{parameter} → {source.get_single_channel_parameter(parameter, 0)}')
+	
+	# ~ for parameter in ['VSET','ISET','MAXV','IMRANGE']:
+		# ~ source.set_single_channel_parameter(parameter, 0, 1)
 	
