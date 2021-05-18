@@ -105,18 +105,11 @@ class CAENDesktopHighVoltagePowerSupply:
 			raise RuntimeError(f'Error trying to set the parameter {parameter}. The response from the instrument is: "{response}"')
 
 if __name__ == '__main__':
-	# ~ print('#### Via Ethernet...')
-	# ~ source = CAENDesktopHighVoltagePowerSupply(ip='130.60.165.228')
-	# ~ for parameter in ['IMON', 'VMON','MAXV','RUP','POL','STAT','VSET','PDWN']:
-		# ~ print(f'{parameter} → {source.get_single_channel_parameter(parameter, channel=1, device=0)}')
-	
-	# ~ for parameter in ['VSET','ISET','MAXV','IMRANGE']:
-		# ~ source.set_single_channel_parameter(parameter, 0, 1)
 	import time
 	
-	print('#### Via USB...')
-	source = CAENDesktopHighVoltagePowerSupply(port='/dev/ttyACM0')
-	# ~ print(source.query(CMD='SET', PAR='ON', CH=0))
+	# ~ source = CAENDesktopHighVoltagePowerSupply(port='/dev/ttyACM0')
+	source = CAENDesktopHighVoltagePowerSupply(ip='130.60.165.238', timeout=10)
+
 	source.set_single_channel_parameter(parameter='ON', channel=0, value=None)
 	for v in [i for i in range(22)]:
 		source.set_single_channel_parameter(parameter='VSET', channel=0, value=float(v))
