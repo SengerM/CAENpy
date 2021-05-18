@@ -80,7 +80,7 @@ class CAENDesktopHighVoltagePowerSupply:
 			received_bytes = self.socket.recv(1024)
 		else:
 			raise RuntimeError(f'There is no serial or Ethernet communication.')
-		return received_bytes.decode('ASCII')[:-2] # Remove the annoying '\r\n' in the end and convert into a string.
+		return received_bytes.decode('ASCII').replace('\n','').replace('\r','') # Remove the annoying '\r\n' in the end and convert into a string.
 	
 	def query(self, CMD, PAR, CH=None, VAL=None, BD=None):
 		self.send_command(BD=BD, CMD=CMD, PAR=PAR, CH=CH, VAL=VAL)
@@ -105,19 +105,22 @@ class CAENDesktopHighVoltagePowerSupply:
 			raise RuntimeError(f'Error trying to set the parameter {parameter}. The response from the instrument is: "{response}"')
 
 if __name__ == '__main__':
-	print('#### Via Ethernet...')
-	source = CAENDesktopHighVoltagePowerSupply(ip='130.60.165.228')
-	for parameter in ['IMON', 'VMON','MAXV','RUP','POL','STAT','VSET','PDWN']:
-		print(f'{parameter} → {source.get_single_channel_parameter(parameter, channel=1, device=0)}')
+	# ~ print('#### Via Ethernet...')
+	# ~ source = CAENDesktopHighVoltagePowerSupply(ip='130.60.165.228')
+	# ~ for parameter in ['IMON', 'VMON','MAXV','RUP','POL','STAT','VSET','PDWN']:
+		# ~ print(f'{parameter} → {source.get_single_channel_parameter(parameter, channel=1, device=0)}')
 	
 	# ~ for parameter in ['VSET','ISET','MAXV','IMRANGE']:
 		# ~ source.set_single_channel_parameter(parameter, 0, 1)
+	import time
 	
 	print('#### Via USB...')
 	source = CAENDesktopHighVoltagePowerSupply(port='/dev/ttyACM0')
-	for parameter in ['IMON', 'VMON','MAXV','RUP','POL','STAT','VSET','PDWN']:
-		print(f'{parameter} → {source.get_single_channel_parameter(parameter, 0, device=0)}')
-	
-	# ~ for parameter in ['VSET','ISET','MAXV','IMRANGE']:
-		# ~ source.set_single_channel_parameter(parameter, 0, 1)
+	# ~ print(source.query(CMD='SET', PAR='ON', CH=0))
+	source.set_single_channel_parameter(parameter='ON', channel=0, value=None)
+	for v in [i for i in range(22)]:
+		source.set_single_channel_parameter(parameter='VSET', channel=0, value=float(v))
+		print(f'VMON = {source.get_single_channel_parameter(parameter="VMON", channel=0)} | IMON = {source.get_single_channel_parameter(parameter="IMON", channel=0)}')
+		time.sleep(1)
+	source.set_single_channel_parameter(parameter='OFF', channel=0, value=None)
 	
