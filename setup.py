@@ -15,7 +15,5 @@ setuptools.setup(
 	],
 	install_requires = [
 		'pyserial',
-		'socket',
-		'platform',
 	],
 )
