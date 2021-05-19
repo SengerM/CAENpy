@@ -1,6 +1,7 @@
 import serial
 import socket
 import platform
+import time
 
 def create_command_string(BD, CMD, PAR, CH=None, VAL=None):
 	try:
@@ -58,7 +59,7 @@ class CAENDesktopHighVoltagePowerSupply:
 			)
 		else: # Both <port> and <ip> are none...
 			raise ValueError(f'Please specify a serial port or an IP addres in which the CAEN device can be found.')
-	
+		
 	def send_command(self, CMD, PAR, CH=None, VAL=None, BD=None):
 		if BD is None:
 			if self.default_BD0 == True:
@@ -103,17 +104,64 @@ class CAENDesktopHighVoltagePowerSupply:
 		response = self.query(CMD='SET', PAR=parameter, CH=channel, BD=device, VAL=value)
 		if check_successful_response(response) == False:
 			raise RuntimeError(f'Error trying to set the parameter {parameter}. The response from the instrument is: "{response}"')
-
-if __name__ == '__main__':
-	import time
 	
-	# ~ source = CAENDesktopHighVoltagePowerSupply(port='/dev/ttyACM0')
-	source = CAENDesktopHighVoltagePowerSupply(ip='130.60.165.238', timeout=10)
-
-	source.set_single_channel_parameter(parameter='ON', channel=0, value=None)
-	for v in [i for i in range(22)]:
-		source.set_single_channel_parameter(parameter='VSET', channel=0, value=float(v))
-		print(f'VMON = {source.get_single_channel_parameter(parameter="VMON", channel=0)} | IMON = {source.get_single_channel_parameter(parameter="IMON", channel=0)}')
-		time.sleep(1)
-	source.set_single_channel_parameter(parameter='OFF', channel=0, value=None)
+	def ramp_voltage(self, voltage: float, channel: int, device: int = None, ramp_speed_VperSec: float = 5, timeout: float = 10):
+		# Blocks the execution until the ramp is completed.
+		# timeout: It is the number of seconds to wait until the VMON (measured voltage) is stable. After this number of seconds, an error will be raised because the voltage cannot stabilize.
+		current_ramp_speed_settings = {}
+		for i in ['up', 'down']:
+			current_ramp_speed_settings[i] = self.get_single_channel_parameter(
+				parameter = 'RUP' if i == 'up' else 'RDW',
+				channel = channel,
+				device = device,
+			)
+			self.set_single_channel_parameter(
+				parameter = 'RUP' if i == 'up' else 'RDW',
+				channel = channel,
+				device = device,
+				value = ramp_speed_VperSec,
+			)
+		try:
+			current_VSET = self.get_single_channel_parameter(
+				parameter = 'VSET',
+				channel = channel,
+				device = device,
+			)
+			self.set_single_channel_parameter(
+				parameter = 'VSET',
+				channel = channel,
+				device = device,
+				value = voltage,
+			)
+			if voltage != current_VSET:
+				time.sleep(((voltage-current_VSET)**2)**.5/ramp_speed_VperSec)
+				previous_VMON = self.get_single_channel_parameter(
+					parameter = 'VMON',
+					channel = channel,
+					device = device,
+				)
+				n_waited_seconds = 0
+				while True: # Here I wait until it stabilizes. In my experience it requires a few extra seconds, but the amount of seconds is a function of DeltaV, the ramp speed, etc.
+					time.sleep(1)
+					n_waited_seconds += 1
+					current_VMON = self.get_single_channel_parameter(
+						parameter = 'VMON',
+						channel = channel,
+						device = device,
+					)
+					if int(current_VMON*10) == int(previous_VMON*10):
+						break
+					previous_VMON = current_VMON
+					if n_waited_seconds > timeout: # If this happens, better to raise an error that I cannot set the voltage. Otherwise this can be blocked forever.
+						raise RuntimeError(f'Cannot reach a stable voltage after a timeout of {timeout} seconds.')
+		except Exception as e:
+			raise e
+		finally:
+			for i in ['up', 'down']:
+				self.set_single_channel_parameter(
+					parameter = 'RUP' if i == 'up' else 'RDW',
+					channel = channel,
+					device = device,
+					value = current_ramp_speed_settings[i],
+				)
 	
