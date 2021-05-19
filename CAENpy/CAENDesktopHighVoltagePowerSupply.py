@@ -35,7 +35,7 @@ class CAENDesktopHighVoltagePowerSupply:
 	# This class was implemented according to the specifications in the 
 	# user manual here: https://www.caen.it/products/dt1470et/
 	def __init__(self, port=None, ip=None, default_BD0=True, timeout=1):
-		# The <timeout> defined the number of seconds to wait until an error is raised if the instrument is not responding. Note that this insturment has the "not nice" behavior that some errors in the commands simply produce a silent answer, instead of reporting an error. For example, if you request the value of a parameter with a "BD" that is not in the daisy-chain, the instrument will give no answer at all, only silence. And you will have to guess what happened.
+		# The <timeout> defines the number of seconds to wait until an error is raised if the instrument is not responding. Note that this instrument has the "not nice" behavior that some errors in the commands simply produce a silent answer, instead of reporting an error. For example, if you request the value of a parameter with a "BD" that is not in the daisy-chain, the instrument will give no answer at all, only silence. And you will have to guess what happened.
 		if default_BD0 not in [True, False]:
 			raise ValueError(f'The argument <default_BD0> must be either True of False. Received {default_BD0}.')
 		self.default_BD0 = default_BD0
@@ -61,6 +61,7 @@ class CAENDesktopHighVoltagePowerSupply:
 			raise ValueError(f'Please specify a serial port or an IP addres in which the CAEN device can be found.')
 		
 	def send_command(self, CMD, PAR, CH=None, VAL=None, BD=None):
+		# Send a command to the CAEN device. The parameters of this method are the ones specified in the user manual.
 		if BD is None:
 			if self.default_BD0 == True:
 				BD = 0
@@ -75,6 +76,7 @@ class CAENDesktopHighVoltagePowerSupply:
 			raise RuntimeError(f'There is no serial or Ethernet communication.')
 	
 	def read_response(self):
+		# Reads the answer from the CAEN device.
 		if hasattr(self, 'serial_port'): # This means that we are talking through the serial port.
 			received_bytes = self.serial_port.readline()
 		elif hasattr(self, 'socket'): # This means that we are talking through an Ethernet connection.
@@ -84,10 +86,15 @@ class CAENDesktopHighVoltagePowerSupply:
 		return received_bytes.decode('ASCII').replace('\n','').replace('\r','') # Remove the annoying '\r\n' in the end and convert into a string.
 	
 	def query(self, CMD, PAR, CH=None, VAL=None, BD=None):
+		# Sends a command and reads the answer.
 		self.send_command(BD=BD, CMD=CMD, PAR=PAR, CH=CH, VAL=VAL)
 		return self.read_response()
 	
 	def get_single_channel_parameter(self, parameter: str, channel: int, device: int=None):
+		# Gets the current value of some parameter (see "MONITOR commands related to the Channels" in the CAEN user manual.)
+		# parameter: This is the <whatever> value in "PAR:whatever" that is specified in the user manual.
+		# channel: Integer number specifying the numer of the channel.
+		# device: If you have more than 1 device connected in the daisy chain, use this parameter to specify the device number (In the user manual this is the <whatever> that goes in "BD:whatever").
 		response = self.query(CMD='MON', PAR=parameter, CH=channel, BD=device)
 		if check_successful_response(response) == False:
 			raise RuntimeError(f'Error trying to get the parameter {parameter}. The response from the instrument is: "{response}"')
@@ -101,6 +108,10 @@ class CAENDesktopHighVoltagePowerSupply:
 		return parameter_value
 	
 	def set_single_channel_parameter(self, parameter: str, channel: int, value, device: int=None):
+		# Sets the value of some parameter (see "SET commands related to the Channels" in the CAEN user manual.)
+		# parameter: This is the <whatever> value in "PAR:whatever" that is specified in the user manual.
+		# channel: Integer number specifying the numer of the channel.
+		# device: If you have more than 1 device connected in the daisy chain, use this parameter to specify the device number (In the user manual this is the <whatever> that goes in "BD:whatever").
 		response = self.query(CMD='SET', PAR=parameter, CH=channel, BD=device, VAL=value)
 		if check_successful_response(response) == False:
 			raise RuntimeError(f'Error trying to set the parameter {parameter}. The response from the instrument is: "{response}"')

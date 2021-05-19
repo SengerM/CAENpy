@@ -10,13 +10,17 @@ pip3 install git+https://github.com/SengerM/CAENpy
 
 ## Usage
 
-Usage example:
+The communication with the device is done via the `set_single_channel_parameter` and `get_single_channel_parameter` methods. 
+
+Simple usage example:
 
 ```Python
 from CAENpy.CAENDesktopHighVoltagePowerSupply import CAENDesktopHighVoltagePowerSupply
 import time
 
 caen = CAENDesktopHighVoltagePowerSupply(ip='130.60.165.238', timeout=10) # Increase timeout for slow networks.
+# caen = CAENDesktopHighVoltagePowerSupply(port='/dev/ttyACM0') # You can also connect via USB (name of port changes in different operating systems, check the user manual of your device).
+
 caen.set_single_channel_parameter(parameter='ON', channel=0, value=None)
 for v in range(22):
 	caen.set_single_channel_parameter( # This does not block execution! You have to manually wait the required time until the voltage is changed.
@@ -33,6 +37,8 @@ Note that in the previous example **the execution is not blocked while the volta
 from CAENpy.CAENDesktopHighVoltagePowerSupply import CAENDesktopHighVoltagePowerSupply
 
 caen = CAENDesktopHighVoltagePowerSupply(ip='130.60.165.238', timeout=10) # Increase timeout for slow networks.
+# caen = CAENDesktopHighVoltagePowerSupply(port='/dev/ttyACM0') # You can also connect via USB (name of port changes in different operating systems, check the user manual of your device).
+
 caen.set_single_channel_parameter(parameter='ON', channel=0, value=None)
 for v in range(22):
 	caen.ramp_voltage( # This blocks the execution until the VMON (i.e. measured voltage) is stable, so you don't have to manually wait/check that it has reached the final voltage.
