@@ -19,7 +19,7 @@ import time
 caen = CAENDesktopHighVoltagePowerSupply(ip='130.60.165.238', timeout=10) # Increase timeout for slow networks.
 caen.set_single_channel_parameter(parameter='ON', channel=0, value=None)
 for v in [i for i in range(22)]:
-	caen.set_single_channel_parameter(
+	caen.set_single_channel_parameter( # This does not block execution! You have to manually wait the required time until the voltage is changed.
 		parameter = 'VSET', 
 		channel = 0, 
 		value = float(v),
@@ -36,7 +36,7 @@ import time
 caen = CAENDesktopHighVoltagePowerSupply(ip='130.60.165.238', timeout=10) # Increase timeout for slow networks.
 caen.set_single_channel_parameter(parameter='ON', channel=0, value=None)
 for v in [i for i in range(22)]:
-	caen.caen.ramp_voltage(
+	caen.ramp_voltage(
 		voltage = v,
 		channel = 0,
 		ramp_speed_VperSec = 1, # Default is 5 V/s.
