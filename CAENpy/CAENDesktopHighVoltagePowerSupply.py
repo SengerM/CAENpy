@@ -176,3 +176,17 @@ class CAENDesktopHighVoltagePowerSupply:
 					value = current_ramp_speed_settings[i],
 				)
 	
+	
+	def channel_status(self, channel: int):
+		if not isinstance(channel, int):
+			raise TypeError(f'<channel> must be an integer number, received object of type {type(channel)}.')
+		status_byte = int(self.query(CMD='MON', PAR='STAT',  CH=channel)[-5:])
+		status_byte_str = f"{status_byte:016b}"
+		status_byte_str = status_byte_str[::-1]
+		return {
+			'status byte': status_byte,
+			'output': 'on' if status_byte_str[0]=='1' else 'off',
+			'ramping up': 'yes' if status_byte_str[1]=='1' else 'no',
+			'ramping down': 'yes' if status_byte_str[2]=='1' else 'no',
+			'I_mon >= I_set': 'yes' if status_byte_str[3]=='1' else 'no',
+		}
