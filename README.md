@@ -21,6 +21,8 @@ import time
 caen = CAENDesktopHighVoltagePowerSupply(ip='130.60.165.238', timeout=10) # Increase timeout for slow networks.
 # caen = CAENDesktopHighVoltagePowerSupply(port='/dev/ttyACM0') # You can also connect via USB (name of port changes in different operating systems, check the user manual of your device).
 
+print(caen.query(CMD='MON', PAR='BDNAME')) # Print module name, example response: '#BD:00,CMD:OK,VAL:DT1470ET'.
+
 caen.set_single_channel_parameter(parameter='ON', channel=0, value=None)
 for v in range(22):
 	caen.set_single_channel_parameter( # This does not block execution! You have to manually wait the required time until the voltage is changed.
