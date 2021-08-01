@@ -176,7 +176,6 @@ class CAENDesktopHighVoltagePowerSupply:
 					value = current_ramp_speed_settings[i],
 				)
 	
-	
 	def channel_status(self, channel: int):
 		if not isinstance(channel, int):
 			raise TypeError(f'<channel> must be an integer number, received object of type {type(channel)}.')
@@ -190,3 +189,23 @@ class CAENDesktopHighVoltagePowerSupply:
 			'ramping down': 'yes' if status_byte_str[2]=='1' else 'no',
 			'I_mon >= I_set': 'yes' if status_byte_str[3]=='1' else 'no',
 		}
+
+	
+	def I_mon(self, channel: int):
+		"""Returns the value of IMON (i.e. measured current) in Ampere."""
+		return 1e-6*self.get_single_channel_parameter(parameter='IMON', channel=channel)
+	
+	def V_mon(self, channel: int):
+		"""Returns the value of VMON (i.e. measured voltage) in Volt."""
+		polarity = self.get_single_channel_parameter(parameter='POL', channel=channel)
+		if polarity == '+':
+			polarity = 1
+		elif polarity == '-':
+			polarity = -1
+		else:
+			raise RuntimeError(f'Unexpected polarity response from the insturment. I was expecting one of {{"+","-"}} but received instead {polarity}.')
+		return polarity*self.get_single_channel_parameter(parameter='VMON', channel=channel)
+	
+	def set_current_compliance(self, channel: int, amperes: float):
+		"""Sets the current compliance of the given channel."""
+		self.set_single_channel_parameter(parameter='ISET', channel=channel, value=amperes*1e6)
