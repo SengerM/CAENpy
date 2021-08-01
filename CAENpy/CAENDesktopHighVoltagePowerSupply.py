@@ -190,7 +190,6 @@ class CAENDesktopHighVoltagePowerSupply:
 			'I_mon >= I_set': 'yes' if status_byte_str[3]=='1' else 'no',
 		}
 
-	
 	def I_mon(self, channel: int):
 		"""Returns the value of IMON (i.e. measured current) in Ampere."""
 		return 1e-6*self.get_single_channel_parameter(parameter='IMON', channel=channel)
@@ -209,3 +208,12 @@ class CAENDesktopHighVoltagePowerSupply:
 	def set_current_compliance(self, channel: int, amperes: float):
 		"""Sets the current compliance of the given channel."""
 		self.set_single_channel_parameter(parameter='ISET', channel=channel, value=amperes*1e6)
+	
+	@property
+	def device_name(self):
+		if not hasattr(self, '_device_name'):
+			response = self.query(CMD='MON', PAR='BDNAME')
+			if check_successful_response(response) == False:
+				raise RuntimeError(f'The instument responded with error: {response}.')
+			self._device_name = response.split('VAL:')[-1]
+		return self._device_name
