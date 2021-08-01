@@ -22,7 +22,7 @@ caen = CAENDesktopHighVoltagePowerSupply(ip='130.60.165.238', timeout=10) # Incr
 # caen = CAENDesktopHighVoltagePowerSupply(port='/dev/ttyACM0') # You can also connect via USB (name of port changes in different operating systems, check the user manual of your device).
 
 # Check that the connection was successful: 
-print(caen.device_name) # Print module name, example: 'DT1470ET'.
+print(f'Model: {caen.model_name}, serial #: {caen.serial_number}') # Print model name and serial number, example: 'Model: DT1470ET, serial #: 13398'.
 
 caen.set_single_channel_parameter(parameter='ON', channel=0, value=None)
 for v in range(22):

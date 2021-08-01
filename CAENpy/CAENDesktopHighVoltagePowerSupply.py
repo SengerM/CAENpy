@@ -210,10 +210,19 @@ class CAENDesktopHighVoltagePowerSupply:
 		self.set_single_channel_parameter(parameter='ISET', channel=channel, value=amperes*1e6)
 	
 	@property
-	def device_name(self):
-		if not hasattr(self, '_device_name'):
+	def model_name(self):
+		if not hasattr(self, '_model_name'):
 			response = self.query(CMD='MON', PAR='BDNAME')
 			if check_successful_response(response) == False:
 				raise RuntimeError(f'The instument responded with error: {response}.')
-			self._device_name = response.split('VAL:')[-1]
-		return self._device_name
+			self._model_name = response.split('VAL:')[-1]
+		return self._model_name
+	
+	@property
+	def serial_number(self):
+		if not hasattr(self, '_serial_number'):
+			response = self.query(CMD='MON', PAR='BDSNUM')
+			if check_successful_response(response) == False:
+				raise RuntimeError(f'The instument responded with error: {response}.')
+			self._serial_number = response.split('VAL:')[-1]
+		return self._serial_number
