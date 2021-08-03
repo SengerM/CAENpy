@@ -31,6 +31,17 @@ def check_successful_response(response_string):
 		raise TypeError(f'<response_string> must be an instance of <str>, received {response_string} of type {type(response_string)}.')
 	return 'OK' in response_string # According to the user manual, if there was no error the answer always contains an "OK".
 
+def _validate_type(variable, variable_name, variable_type):
+	if not isinstance(variable, variable_type):
+		raise TypeError(f'<variable_name> expected object of type {variable_type}, received object of type {type(variable)}.')
+
+def _validate_numeric_type(variable, variable_name, variable_numeric_type):
+	try:
+		variable = variable_numeric_type(variable)
+	except:
+		raise TypeError(f'<variable_name> expected object of type {variable_numeric_type}, received object of type {type(variable)}.')
+	return variable
+
 class CAENDesktopHighVoltagePowerSupply:
 	# This class was implemented according to the specifications in the 
 	# user manual here: https://www.caen.it/products/dt1470et/
@@ -119,61 +130,44 @@ class CAENDesktopHighVoltagePowerSupply:
 	def ramp_voltage(self, voltage: float, channel: int, device: int = None, ramp_speed_VperSec: float = 5, timeout: float = 10):
 		# Blocks the execution until the ramp is completed.
 		# timeout: It is the number of seconds to wait until the VMON (measured voltage) is stable. After this number of seconds, an error will be raised because the voltage cannot stabilize.
+		ramp_speed_VperSec = _validate_numeric_type(ramp_speed_VperSec, 'ramp_speed_VperSec', float)
+		voltage = _validate_numeric_type(voltage, 'voltage', float)
+		timeout = _validate_numeric_type(timeout, 'timeout', float)
+		channel = _validate_numeric_type(channel, 'channel', int)
+		if device is not None:
+			device = _validate_numeric_type(device, 'device', int)
+		
 		current_ramp_speed_settings = {}
-		for i in ['up', 'down']:
-			current_ramp_speed_settings[i] = self.get_single_channel_parameter(
-				parameter = 'RUP' if i == 'up' else 'RDW',
-				channel = channel,
-				device = device,
-			)
-			self.set_single_channel_parameter(
-				parameter = 'RUP' if i == 'up' else 'RDW',
-				channel = channel,
-				device = device,
-				value = ramp_speed_VperSec,
-			)
+		for par in ['RUP', 'RDW']:
+			current_ramp_speed_settings[par] = self.get_single_channel_parameter(parameter=par, channel=channel, device=device)
+			self.set_single_channel_parameter(parameter=par, channel=channel, device=device, value=ramp_speed_VperSec)
+		current_voltage = self.get_single_channel_parameter(parameter='VSET', channel=channel, device=device)
+		expected_ramping_seconds = ((current_voltage-voltage)**2)**.5/ramp_speed_VperSec
 		try:
-			current_VSET = self.get_single_channel_parameter(
-				parameter = 'VSET',
-				channel = channel,
-				device = device,
-			)
 			self.set_single_channel_parameter(
 				parameter = 'VSET',
 				channel = channel,
 				device = device,
 				value = voltage,
 			)
-			if voltage != current_VSET:
-				time.sleep(((voltage-current_VSET)**2)**.5/ramp_speed_VperSec)
-				previous_VMON = self.get_single_channel_parameter(
-					parameter = 'VMON',
-					channel = channel,
-					device = device,
-				)
-				n_waited_seconds = 0
-				while True: # Here I wait until it stabilizes. In my experience it requires a few extra seconds, but the amount of seconds is a function of DeltaV, the ramp speed, etc.
-					time.sleep(1)
-					n_waited_seconds += 1
-					current_VMON = self.get_single_channel_parameter(
-						parameter = 'VMON',
-						channel = channel,
-						device = device,
-					)
-					if int(current_VMON*10) == int(previous_VMON*10):
-						break
-					previous_VMON = current_VMON
-					if n_waited_seconds > timeout: # If this happens, better to raise an error that I cannot set the voltage. Otherwise this can be blocked forever.
-						raise RuntimeError(f'Cannot reach a stable voltage after a timeout of {timeout} seconds.')
+			n_waited_seconds = 0
+			while True: # Here I wait until it stabilizes.
+				time.sleep(1)
+				n_waited_seconds += 1
+				if self.channel_status(channel = channel)['ramping up'] == 'no' and self.channel_status(channel = channel)['ramping down'] == 'no':
+					break
+				if n_waited_seconds > expected_ramping_seconds + timeout: # If this happens, better to raise an error that I cannot set the voltage. Otherwise this can be blocked forever.
+					raise RuntimeError(f'Cannot reach a stable voltage after a timeout of {timeout} seconds.')
 		except Exception as e:
 			raise e
 		finally:
-			for i in ['up', 'down']:
+			# Set back original configuration.
+			for par in ['RUP', 'RDW']:
 				self.set_single_channel_parameter(
-					parameter = 'RUP' if i == 'up' else 'RDW',
+					parameter = par,
 					channel = channel,
 					device = device,
-					value = current_ramp_speed_settings[i],
+					value = current_ramp_speed_settings[par],
 				)
 	
 	def channel_status(self, channel: int):
