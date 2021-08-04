@@ -33,13 +33,13 @@ def check_successful_response(response_string):
 
 def _validate_type(variable, variable_name, variable_type):
 	if not isinstance(variable, variable_type):
-		raise TypeError(f'<variable_name> expected object of type {variable_type}, received object of type {type(variable)}.')
+		raise TypeError(f'<{variable_name}> expected object of type {variable_type}, received object of type {type(variable)}.')
 
 def _validate_numeric_type(variable, variable_name, variable_numeric_type):
 	try:
 		variable = variable_numeric_type(variable)
 	except:
-		raise TypeError(f'<variable_name> expected object of type {variable_numeric_type}, received object of type {type(variable)}.')
+		raise TypeError(f'<{variable_name}> expected object of type {variable_numeric_type}, received object of type {type(variable)}.')
 	return variable
 
 class CAENDesktopHighVoltagePowerSupply:
@@ -170,10 +170,13 @@ class CAENDesktopHighVoltagePowerSupply:
 					value = current_ramp_speed_settings[par],
 				)
 	
-	def channel_status(self, channel: int):
+	def channel_status(self, channel: int, device: int=None):
+		"""Returns the information from the status byte for the specified
+		channel. Returns a dictionary containint the status byte and also
+		some "human friendly" interpretations of the status byte."""
 		if not isinstance(channel, int):
 			raise TypeError(f'<channel> must be an integer number, received object of type {type(channel)}.')
-		status_byte = int(self.query(CMD='MON', PAR='STAT',  CH=channel)[-5:])
+		status_byte = int(self.query(CMD='MON', PAR='STAT',  CH=channel, BD=device)[-5:])
 		status_byte_str = f"{status_byte:016b}"
 		status_byte_str = status_byte_str[::-1]
 		return {
@@ -181,28 +184,9 @@ class CAENDesktopHighVoltagePowerSupply:
 			'output': 'on' if status_byte_str[0]=='1' else 'off',
 			'ramping up': 'yes' if status_byte_str[1]=='1' else 'no',
 			'ramping down': 'yes' if status_byte_str[2]=='1' else 'no',
-			'I_mon >= I_set': 'yes' if status_byte_str[3]=='1' else 'no',
+			'there was overcurrent': 'yes' if status_byte_str[3]=='1' else 'no',
 		}
 
-	def I_mon(self, channel: int):
-		"""Returns the value of IMON (i.e. measured current) in Ampere."""
-		return 1e-6*self.get_single_channel_parameter(parameter='IMON', channel=channel)
-	
-	def V_mon(self, channel: int):
-		"""Returns the value of VMON (i.e. measured voltage) in Volt."""
-		polarity = self.get_single_channel_parameter(parameter='POL', channel=channel)
-		if polarity == '+':
-			polarity = 1
-		elif polarity == '-':
-			polarity = -1
-		else:
-			raise RuntimeError(f'Unexpected polarity response from the insturment. I was expecting one of {{"+","-"}} but received instead {polarity}.')
-		return polarity*self.get_single_channel_parameter(parameter='VMON', channel=channel)
-	
-	def set_current_compliance(self, channel: int, amperes: float):
-		"""Sets the current compliance of the given channel."""
-		self.set_single_channel_parameter(parameter='ISET', channel=channel, value=amperes*1e6)
-	
 	@property
 	def model_name(self):
 		if not hasattr(self, '_model_name'):
@@ -220,3 +204,104 @@ class CAENDesktopHighVoltagePowerSupply:
 				raise RuntimeError(f'The instument responded with error: {response}.')
 			self._serial_number = response.split('VAL:')[-1]
 		return self._serial_number
+
+class OneCAENChannel:
+	def __init__(self, caen, channel_number, device: int=None):
+		"""A wrapper for a single channel of the CAEN power supply, to ease
+		its usage and avoid confisuions with channel numbers."""
+		_validate_type(caen, 'caen', CAENDesktopHighVoltagePowerSupply)
+		_validate_numeric_type(channel_number, 'channel_number', int)
+		if device is not None:
+			_validate_numeric_type(device, 'device', int)
+		self._caen = caen
+		self._channel_number = channel_number
+		self._device = device
+	
+	def set(self, PAR, VAL):
+		VALID_PARs = {'VSET','ISET','MAXV','RUP','RDW','TRIP','PDWN','IMRANGE','ON','OFF','ZCADJ'}
+		if PAR not in VALID_PARs:
+			raise ValueError(f'<PAR> must be one of {VALID_PARs}. Refer to the user manual of the CAEN power supply for more information.')
+		self._caen.set_single_channel_parameter(parameter=PAR, value=VAL, channel=self.channel_number, device=self._device)
+	
+	def get(self, PAR):
+		return self._caen.get_single_channel_parameter(parameter=PAR, channel=self.channel_number, device=self._device)
+	
+	@property
+	def belongs_to(self):
+		return f'CAEN model {self._caen.model_name}, serial number {self._caen.serial_number}'
+	
+	@property
+	def channel_number(self):
+		return self._channel_number
+	
+	@property
+	def V_mon(self):
+		channel_polarity = self.polarity
+		if channel_polarity == '+':
+			polarity = 1
+		elif channel_polarity == '-':
+			polarity = -1
+		else:
+			raise RuntimeError(f'Unexpected polarity response from the insturment. I was expecting one of {{"+","-"}} but received instead {channel_polarity}.')
+		return polarity*self.get(PAR='VMON')
+	
+	@property
+	def I_mon(self):
+		return 1e-6*self.get(PAR='IMON')
+	
+	@property
+	def V_set(self):
+		return self.get('VSET')
+	@V_set.setter
+	def V_set(self, voltage):
+		_validate_numeric_type(voltage,'voltage',float)
+		self.set(PAR='VSET',VAL=voltage)
+	
+	@property
+	def polarity(self):
+		return self.get(PAR='POL')
+	
+	@property
+	def status_byte(self):
+		return self._caen.channel_status(channel=self.channel_number, device=self._device)['status byte']
+	@property
+	def is_ramping(self):
+		return self._caen.channel_status(channel=self.channel_number, device=self._device)['ramping up']=='yes' or self._caen.channel_status(channel=self.channel_number, device=self._device)['ramping down']=='yes'
+	@property
+	def there_was_overcurrent(self):
+		return self._caen.channel_status(channel=self.channel_number, device=self._device)['there was overcurrent']=='yes'
+	
+	@property
+	def output(self):
+		return self._caen.channel_status(channel=self.channel_number, device=self._device)['output']
+	@output.setter
+	def output(self, output_status: str):
+		_validate_type(output_status, 'output_status', str)
+		output_status = output_status.lower()
+		if output_status not in {'on','off'}:
+			raise ValueError(f'<output_status> must be either "on" or "off", received {output_status}.')
+		if output_status == 'on':
+			self.set(PAR='ON',VAL=0)
+		else:
+			self.set(PAR='OFF',VAL=0)
+	
+	@property
+	def current_compliance(self):
+		return self.get('ISET')*1e-6
+	@current_compliance.setter
+	def current_compliance(self, amperes):
+		_validate_numeric_type(amperes, 'amperes', float)
+		self.set(PAR='ISET',VAL=1e6*amperes)
+	
+	def ramp_voltage(self, voltage, ramp_speed_VperSec: float = 5, timeout: float = 10):
+		_validate_numeric_type(voltage, 'voltage', float)
+		_validate_numeric_type(ramp_speed_VperSec, 'ramp_speed_VperSec', float)
+		_validate_numeric_type(timeout, 'timeout', float)
+		self._caen.ramp_voltage(voltage=voltage, channel=self.channel_number, device = self._device, ramp_speed_VperSec = ramp_speed_VperSec, timeout = timeout)
+	
+	def __str__(self):
+		return f'Channel {self.channel_number} of {self.belongs_to}'
+	
+	def __repr__(self):
+		return f'<{str(type(self))[1:-1]}, {self}>'
+		
