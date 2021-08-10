@@ -2,6 +2,7 @@ import serial
 import socket
 import platform
 import time
+from threading import RLock
 
 def create_command_string(BD, CMD, PAR, CH=None, VAL=None):
 	try:
@@ -45,6 +46,7 @@ def _validate_numeric_type(variable, variable_name, variable_numeric_type):
 class CAENDesktopHighVoltagePowerSupply:
 	# This class was implemented according to the specifications in the 
 	# user manual here: https://www.caen.it/products/dt1470et/
+	# The implementation in this class should be thread safe.
 	def __init__(self, port=None, ip=None, default_BD0=True, timeout=1):
 		# The <timeout> defines the number of seconds to wait until an error is raised if the instrument is not responding. Note that this instrument has the "not nice" behavior that some errors in the commands simply produce a silent answer, instead of reporting an error. For example, if you request the value of a parameter with a "BD" that is not in the daisy-chain, the instrument will give no answer at all, only silence. And you will have to guess what happened.
 		if default_BD0 not in [True, False]:
@@ -71,6 +73,8 @@ class CAENDesktopHighVoltagePowerSupply:
 		else: # Both <port> and <ip> are none...
 			raise ValueError(f'Please specify a serial port or an IP addres in which the CAEN device can be found.')
 		
+		self._communication_lock = RLock() # To make a thread safe implementation.
+		
 	def send_command(self, CMD, PAR, CH=None, VAL=None, BD=None):
 		# Send a command to the CAEN device. The parameters of this method are the ones specified in the user manual.
 		if BD is None:
@@ -80,26 +84,32 @@ class CAENDesktopHighVoltagePowerSupply:
 				raise ValueError(f'Please specify a value for the <BD> parameter. Refer to the CAEN user manual.')
 		bytes2send = create_command_string(BD=BD, CMD=CMD, PAR=PAR, CH=CH, VAL=VAL).encode('ASCII')
 		if hasattr(self, 'serial_port'): # This means that we are talking through the serial port.
-			self.serial_port.write(bytes2send)
+			with self._communication_lock:
+				self.serial_port.write(bytes2send)
 		elif hasattr(self, 'socket'): # This means that we are talking through an Ethernet connection.
-			self.socket.sendall(bytes2send)
+			with self._communication_lock:
+				self.socket.sendall(bytes2send)
 		else:
 			raise RuntimeError(f'There is no serial or Ethernet communication.')
 	
 	def read_response(self):
 		# Reads the answer from the CAEN device.
 		if hasattr(self, 'serial_port'): # This means that we are talking through the serial port.
-			received_bytes = self.serial_port.readline()
+			with self._communication_lock:
+				received_bytes = self.serial_port.readline()
 		elif hasattr(self, 'socket'): # This means that we are talking through an Ethernet connection.
-			received_bytes = self.socket.recv(1024)
+			with self._communication_lock:
+				received_bytes = self.socket.recv(1024)
 		else:
 			raise RuntimeError(f'There is no serial or Ethernet communication.')
 		return received_bytes.decode('ASCII').replace('\n','').replace('\r','') # Remove the annoying '\r\n' in the end and convert into a string.
 	
 	def query(self, CMD, PAR, CH=None, VAL=None, BD=None):
 		# Sends a command and reads the answer.
-		self.send_command(BD=BD, CMD=CMD, PAR=PAR, CH=CH, VAL=VAL)
-		return self.read_response()
+		with self._communication_lock: # Lock it to ensure that the answer I return corresponds to this command. Otherwise another thread could send a new command between my send and my read.
+			self.send_command(BD=BD, CMD=CMD, PAR=PAR, CH=CH, VAL=VAL)
+			response = self.read_response()
+		return response
 	
 	def get_single_channel_parameter(self, parameter: str, channel: int, device: int=None):
 		# Gets the current value of some parameter (see "MONITOR commands related to the Channels" in the CAEN user manual.)
