@@ -184,8 +184,7 @@ class CAENDesktopHighVoltagePowerSupply:
 		"""Returns the information from the status byte for the specified
 		channel. Returns a dictionary containint the status byte and also
 		some "human friendly" interpretations of the status byte."""
-		if not isinstance(channel, int):
-			raise TypeError(f'<channel> must be an integer number, received object of type {type(channel)}.')
+		_validate_type(channel, 'channel', int)
 		status_byte = int(self.query(CMD='MON', PAR='STAT',  CH=channel, BD=device)[-5:])
 		status_byte_str = f"{status_byte:016b}"
 		status_byte_str = status_byte_str[::-1]
@@ -220,9 +219,9 @@ class OneCAENChannel:
 		"""A wrapper for a single channel of the CAEN power supply, to ease
 		its usage and avoid confisuions with channel numbers."""
 		_validate_type(caen, 'caen', CAENDesktopHighVoltagePowerSupply)
-		_validate_numeric_type(channel_number, 'channel_number', int)
+		_validate_type(channel_number, 'channel_number', int)
 		if device is not None:
-			_validate_numeric_type(device, 'device', int)
+			_validate_type(device, 'device', int)
 		self._caen = caen
 		self._channel_number = channel_number
 		self._device = device
