@@ -1,6 +1,8 @@
 # CAENpy
 
-Easily control [CAEN](https://www.caen.it/) equipment with pure Python. 
+Easily control [CAEN](https://www.caen.it/) equipment with pure Python.
+
+![Picture of a CAEN power supply](https://www.caen.it/wp-content/uploads/2017/10/DT1471HET_g.jpg)
 
 ## Installation
 
