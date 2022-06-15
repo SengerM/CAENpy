@@ -74,7 +74,7 @@ class CAENDesktopHighVoltagePowerSupply:
 			raise ValueError(f'Please specify a serial port or an IP addres in which the CAEN device can be found.')
 		
 		self._communication_lock = RLock() # To make a thread safe implementation.
-		
+	
 	def send_command(self, CMD, PAR, CH=None, VAL=None, BD=None):
 		# Send a command to the CAEN device. The parameters of this method are the ones specified in the user manual.
 		if BD is None:
@@ -213,6 +213,15 @@ class CAENDesktopHighVoltagePowerSupply:
 				raise RuntimeError(f'The instument responded with error: {response}.')
 			self._serial_number = response.split('VAL:')[-1]
 		return self._serial_number
+	
+	@property
+	def idn(self) -> str:
+		"""Returns a string with information about the device identity."""
+		if not hasattr(self, '_idn'):
+			name = self.model_name
+			serial_number = self.serial_number
+			self._idn = f'CAEN {name}, SN:{serial_number}'
+		return self._idn
 
 class OneCAENChannel:
 	def __init__(self, caen, channel_number, device: int=None):
