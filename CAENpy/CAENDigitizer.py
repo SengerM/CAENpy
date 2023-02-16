@@ -87,6 +87,21 @@ class CAEN_DT5742_Digitizer:
 		self.eventVoidPointer = cast(byref(self.eventObject), POINTER(c_void_p)) # Need to create a **void since technically speaking other kinds of Event() esist as well (the CAENDigitizer library supports a multitude of devices, with different Event() structures) and we need to pass this to "universal" methods.
 		
 		self._open() # Open the connection to the digitizer.
+		
+		model = self.get_info()['ModelName'].decode('utf8')
+		if model != 'DT5742':
+			raise RuntimeError(f'This class was designed to command a CAEN DT5742 digitizer, but instead now you are connected to a CAEN {model}. It may be possible that with a small adaption this code still works, but you have to take care of this...')
+	
+	@property
+	def idn(self):
+		"""Return a string with information about the digitizer (model, 
+		serial number, etc)."""
+		if not hasattr(self, '_idn'):
+			info = self.get_info()
+			model = info['ModelName'].decode('utf8')
+			serial_number = info['SerialNumber']
+			self._idn = f'CAEN {model} digitizer, serial number {serial_number}'
+		return self._idn
 	
 	def __enter__(self):
 		self._allocateEvent()
