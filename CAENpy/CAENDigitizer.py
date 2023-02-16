@@ -105,6 +105,10 @@ class CAEN_DT5742_Digitizer:
 		return self._idn
 	
 	def __enter__(self):
+		if self.get_acquisition_status()['acquiring now'] == True:
+			raise RuntimeError(f'The digitizer is already acquiring, cannot start a new acquisition.')
+		self._LoadDRS4CorrectionData(MHz=self.get_sampling_frequency())
+		self._DRS4_correction(enable=True)
 		self._allocateEvent()
 		self._mallocBuffer()
 		self._start_acquisition()
@@ -249,13 +253,43 @@ class CAEN_DT5742_Digitizer:
 		)
 		check_error_code(code)
 
-	def get_acquisition_status(self):
-		"""Reads and returns the 'Acquisition Status' register."""
+	def get_acquisition_status(self) -> dict:
+		"""Reads and returns the 'Acquisition Status' register.
+		
+		Returns
+		-------
+		status: dict
+			A dictionary of the form:
+			```
+			{
+				'acquisition_status_register': int, # Actual value read from the register.
+				'acquiring now': bool,
+				'at least one event available for readout': bool,
+				'events memory is full': bool,
+				'clock source': str, # 'external' or 'external'.
+				'PLL unlock detected': bool,
+				'ready for acquisition': bool,
+				'S-IN/GPI pin status': bool,
+				'TRIG-IN status': bool,
+			}
+			```
+		"""
 		# Wait - read - wait - read to clear registers and get digitizer's status. Funny but works.
 		time.sleep(0.3)
 		self.read_register(0x8104)
 		time.sleep(0.2)
-		return self.read_register(0x8104)
+		acquisition_status_register = self.read_register(0x8104)
+		return {
+			'acquisition_status_register': acquisition_status_register,
+			'acquiring now': True if acquisition_status_register & 1<<2 else False,
+			'at least one event available for readout': True if acquisition_status_register & 1<<3 else False,
+			'events memory is full': True if acquisition_status_register & 1<<4 else False,
+			'clock source': 'external' if acquisition_status_register & 1<<5 else 'external',
+			'PLL unlock detected': False if acquisition_status_register & 1<<7 else True,
+			'ready for acquisition': True if acquisition_status_register & 1<<8 else False,
+			'S-IN/GPI pin status': True if acquisition_status_register & 1<<15 else False,
+			'TRIG-IN status': True if acquisition_status_register & 1<<16 else False,
+		}
 
 	def set_fast_trigger_mode(self, enabled:bool):
 		"""Enable or disable the TRn as the local trigger in the x742 series.
@@ -411,7 +445,17 @@ class CAEN_DT5742_Digitizer:
 			c_long(FREQUENCY_VALUES[MHz]),
 		)
 		check_error_code(code)
-
+	
+	def get_sampling_frequency(self) -> int:
+		"""Returns the sampling frequency as an integer number in mega Hertz."""
+		freq = c_long()
+		code = libCAENDigitizer.CAEN_DGTZ_GetDRS4SamplingFrequency(
+			self._get_handle(), 
+			byref(freq),
+		)
+		check_error_code(code)
+		return {code: MHz for MHz,code in CAEN_DGTZ_DRS4Frequency_MEGA_HERTZ.items()}[int(freq.value)]
+	
 	def enable_channels(self, group_1:bool, group_2:bool):
 		"""Set which groups to enable and/or disable.
 		
@@ -535,7 +579,7 @@ class CAEN_DT5742_Digitizer:
 		)
 		check_error_code(code)
 
-	def load_correction_data(self, MHz:int):
+	def _LoadDRS4CorrectionData(self, MHz:int):
 		"""Load correction tables from digitizer's memory at right frequency.
 		
 		Arguments
@@ -553,7 +597,7 @@ class CAEN_DT5742_Digitizer:
 		)
 		check_error_code(code)
 
-	def DRS4_correction(self, enable:bool):
+	def _DRS4_correction(self, enable:bool):
 		"""Enable raw data correction using tables loaded with loadCorrectionData.
 		This corrects for slight differences in ADC capacitors' values and
 		different latency between the two groups' circutry. Refer to manual for
@@ -567,9 +611,21 @@ class CAEN_DT5742_Digitizer:
 			code = libCAENDigitizer.CAEN_DGTZ_DisableDRS4Correction(self._get_handle())
 		check_error_code(code)
 	
-	def get_waveforms(self):
+	def get_waveforms(self, get_time:bool=True, get_ADCu_instead_of_volts:bool=False):
 		"""Reads all the data from the digitizer into the computer and parses
 		it, returning a human friendly data structure with the waveforms.
+		
+		Arguments
+		---------
+		get_time: bool, default True
+			If `True`, an array containing the time for each sample is
+			returned within the `waveforms` dict. If `False`, the `'Time (s)'`
+			component is omitted. This may be useful to produce smaller
+			amounts of data to store.
+		get_ADCu_instead_of_volts: bool, default False
+			If `True` the `'Amplitude (V)'` component in the returned 
+			`waveforms` dict is replaced by an array containing the samples
+			in ADC units (i.e. 0, 1, ..., 2**N_BITS-1).
 		
 		Returns
 		-------
@@ -582,31 +638,45 @@ class CAEN_DT5742_Digitizer:
 			`n_channel` is an integer denoting the number of channel and
 			`variable` is either `'Time (s)'` or `'Amplitude (V)'`.
 		"""
+		MAX_ADC = 2**12-1 # It is a 12 bit ADC.
+		PEAK_TO_PEAK_DINAMIC_RANGE = 1 # Volt.
+		
 		self._ReadData() # Bring data from digitizer to PC.
 		
-		# Convert the data into something human friendly, i.e. all the ugly stuff is happening below...
+		# Convert the data into something human friendly for the user, i.e. all the ugly stuff is happening below...
 		n_events = self._GetNumEvents()
 		waveforms = {}
+		sampling_frequency = self.get_sampling_frequency()*1e6
 		for n_event in range(n_events):
 			self._GetEventInfo(n_event)
 			self._DecodeEvent()
 			event = self.eventObject.contents
 			
 			event_waveforms = {}
-			for j in range(18):
-				group = int(j / 9)
-				if event.GrPresent[group] != 1:
+			for n_channel in range(18):
+				n_group = int(n_channel / 9)
+				if event.GrPresent[n_group] != 1:
 					continue # If this group was disabled then skip it
 
-				channel = j - (9 * group)
-				block = event.DataGroup[group]
-				size = block.ChSize[channel]
+				n_channel_within_group = n_channel - (9 * n_group)
+				block = event.DataGroup[n_group]
+				waveform_length = block.ChSize[n_channel_within_group]
 				
-				wf = {
-					'Amplitude (V)': numpy.array([int(block.DataChannel[channel][_]) for _ in range(size)]),
-					'Time (s)': numpy.array(range(size)),
-				}
-				event_waveforms[channel] = wf
+				if 'time_array' not in locals(): # They all have the same time array, so only generate it once.
+					time_array = numpy.array(range(waveform_length))/sampling_frequency
+				
+				samples = numpy.array([float(block.DataChannel[n_channel_within_group][_]) for _ in range(waveform_length)])
+				samples[(samples<1)|(samples>MAX_ADC-1)] = float('NaN') # These values denote ADC overflow, thus it is safe to replace them with NaN so they don't go unnoticed.
+				
+				wf = {}
+				if get_ADCu_instead_of_volts == False:
+					wf['Amplitude (V)'] = (samples-MAX_ADC/2)*PEAK_TO_PEAK_DINAMIC_RANGE/MAX_ADC
+				else:
+					wf['Amplitude (ADCu)'] = samples
+				if get_time:
+					wf['Time (s)'] = time_array
+				
+				event_waveforms[n_channel] = wf
 			waveforms[n_event] = event_waveforms
 		return waveforms
 	
