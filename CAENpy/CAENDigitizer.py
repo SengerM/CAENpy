@@ -4,6 +4,7 @@
 
 from ctypes import *
 import time
+import numpy
 
 libCAENDigitizer = CDLL('/usr/lib/libCAENDigitizer.so') # Change the path according to your installation. This is the default one in Ubuntu 22.04. The official library can be found here https://www.caen.it/products/caendigitizer-library/
 
@@ -480,7 +481,7 @@ class CAEN_DT5742_Digitizer:
 		code = libCAENDigitizer.CAEN_DGTZ_SWStopAcquisition(self._get_handle())
 		check_error_code(code)
 
-	def _read_data(self):
+	def _ReadData(self):
 		"""Reads data from the digitizer into the computer."""
 		code = libCAENDigitizer.CAEN_DGTZ_ReadData(
 			self._get_handle(), 
@@ -490,7 +491,7 @@ class CAEN_DT5742_Digitizer:
 		)
 		check_error_code(code)
 
-	def get_number_of_events(self):
+	def _GetNumEvents(self):
 		"""Get the number of events contained in the last block transfer
 		initiated."""
 		eventNumber = c_uint32()
@@ -503,7 +504,7 @@ class CAEN_DT5742_Digitizer:
 		check_error_code(code)
 		return eventNumber.value
 
-	def get_event_info(self, n_event:int):
+	def _GetEventInfo(self, n_event:int):
 		"""Fill the eventInfo object declared in __init__ with stats from
 		the i-th event in the buffer (and thus from the last block transfer).
 		At the end of this function eventPointer will point to the i-th event.
@@ -512,11 +513,6 @@ class CAEN_DT5742_Digitizer:
 		---------
 		n_event: int
 			Number of event to get the event info.
-		
-		Returns
-		-------
-		event_info
-			An object with information about this event.
 		"""
 		code = libCAENDigitizer.CAEN_DGTZ_GetEventInfo(
 			self._get_handle(), 
@@ -527,9 +523,8 @@ class CAEN_DT5742_Digitizer:
 			byref(self.eventPointer)
 		)
 		check_error_code(code)
-		return self.eventInfo
 
-	def decode_event(self):
+	def _DecodeEvent(self):
 		"""Decode the event in eventPointer and put all data in the eventObject
 		created in __init__. eventPointer is filled by calling getEventInfo first.
 		"""
@@ -539,13 +534,6 @@ class CAEN_DT5742_Digitizer:
 			self.eventVoidPointer
 		)
 		check_error_code(code)
-		return self.eventObject.contents
-
-	def get_event(self, index):
-		"""Get event data."""
-		info = self.get_event_info(index)
-		event = self.decode_event()
-		return event, info
 
 	def load_correction_data(self, MHz:int):
 		"""Load correction tables from digitizer's memory at right frequency.
@@ -578,7 +566,50 @@ class CAEN_DT5742_Digitizer:
 		else:
 			code = libCAENDigitizer.CAEN_DGTZ_DisableDRS4Correction(self._get_handle())
 		check_error_code(code)
+	
+	def get_waveforms(self):
+		"""Reads all the data from the digitizer into the computer and parses
+		it, returning a human friendly data structure with the waveforms.
+		
+		Returns
+		-------
+		waveforms: dict
+			A nested dictionary of the form:
+			```
+			waveforms[n_event][n_channel][variable]
+			```
+			where `n_event` is an integer denoting the event number, 
+			`n_channel` is an integer denoting the number of channel and
+			`variable` is either `'Time (s)'` or `'Amplitude (V)'`.
+		"""
+		self._ReadData() # Bring data from digitizer to PC.
+		
+		# Convert the data into something human friendly, i.e. all the ugly stuff is happening below...
+		n_events = self._GetNumEvents()
+		waveforms = {}
+		for n_event in range(n_events):
+			self._GetEventInfo(n_event)
+			self._DecodeEvent()
+			event = self.eventObject.contents
+			
+			event_waveforms = {}
+			for j in range(18):
+				group = int(j / 9)
+				if event.GrPresent[group] != 1:
+					continue # If this group was disabled then skip it
 
+				channel = j - (9 * group)
+				block = event.DataGroup[group]
+				size = block.ChSize[channel]
+				
+				wf = {
+					'Amplitude (V)': numpy.array([int(block.DataChannel[channel][_]) for _ in range(size)]),
+					'Time (s)': numpy.array(range(size)),
+				}
+				event_waveforms[channel] = wf
+			waveforms[n_event] = event_waveforms
+		return waveforms
+	
 def __init__():
 	functions = [
 		libCAENDigitizer.CAEN_DGTZ_OpenDigitizer,

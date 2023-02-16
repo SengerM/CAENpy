@@ -4,21 +4,25 @@ import numpy
 import pandas
 import plotly.express as px
 
+def pretty(d, indent=0):
+	for key, value in d.items():
+		print('\t' * indent + str(key))
+		if isinstance(value, dict):
+			pretty(value, indent+1)
+		else:
+			print('\t' * (indent+1) + str(value))
+
 d = CAEN_DT5742_Digitizer(LinkNum=0)
 d.reset()
 
-print('###')
-info = d.get_info()
-for key in sorted(info):
-	print(f'{key}: {info[key]}')
-print('###')
+print(d.idn)
 
 d.set_sampling_frequency(MHz=5000)
 d.set_record_length(1024)
 d.set_max_num_events_BLT(2)
 d.set_acquisition_mode('sw_controlled')
 d.set_ext_trigger_input_mode('disabled')
-d.write_register(0x811C, 0x000D0001) # Enable busy signal on GPO.
+# ~ d.write_register(0x811C, 0x000D0001) # Enable busy signal on GPO.
 d.set_fast_trigger_mode(enabled=True)
 d.set_fast_trigger_digitizing(enabled=True)
 d.enable_channels(group_1=True, group_2=True)
@@ -28,44 +32,29 @@ d.set_fast_trigger_DC_offset(32768)
 d.set_fast_trigger_threshold(24000)
 d.set_post_trigger_size(30)
 
-status = d.get_acquisition_status()
-print(f"Digitizer status is {status:#04X} (OK is 0x180)" )
+print(f"status {d.get_acquisition_status():032b}" )
 
 with d:
-	d.read_data()
-	n_events = d.get_number_of_events()
+	waveforms = d.get_waveforms()
 	
-	for n_event in range(n_events):
-		event, event_info = d.get_event(n_event)
-		
-		event_waveforms = []
-		for j in range(18):
-			group = int(j / 9)
-			if event.GrPresent[group] != 1:
-				continue # If this group was disabled then skip it
+	data = []
+	for n_event in waveforms:
+		for n_channel in waveforms[n_event]:
+			df = pandas.DataFrame(waveforms[n_event][n_channel])
+			df['n_event'] = n_event
+			df['n_channel'] = n_channel
+			df.set_index(['n_event','n_channel'], inplace=True)
+			data.append(df)
+	data = pandas.concat(data)
+	print(data)
+	fig = px.line(
+		data_frame = data.reset_index(),
+		x = 'Time (s)',
+		y = 'Amplitude (V)',
+		color = 'n_channel',
+		facet_row = 'n_event',
+		markers = True,
+	)
+	fig.write_html('plot.html')
 
-			channel = j - (9 * group)
-			block = event.DataGroup[group]
-			size = block.ChSize[channel]
-			
-			wf = pandas.DataFrame(
-				{
-					'sample': numpy.array([int(block.DataChannel[channel][_]) for _ in range(size)]),
-					'time': numpy.array(range(size)),
-				}
-			)
-			wf['channel'] = channel
-			event_waveforms.append(wf)
-		event_waveforms = pandas.concat(event_waveforms)
-		print(event_waveforms)
-		fig = px.line(
-			data_frame = event_waveforms,
-			x = 'time',
-			y = 'sample',
-			color = 'channel',
-			markers = True,
-		)
-		fig.write_html('plot.html')
-		input('Continue?')
-	
 	print('Finishing...')
