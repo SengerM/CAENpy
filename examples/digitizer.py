@@ -1,40 +1,35 @@
 from CAENpy.CAENDigitizer import CAEN_DT5742_Digitizer
-from ctypes import *
 import numpy
 import pandas
 import plotly.express as px
 
-def pretty(d, indent=0):
-	for key, value in d.items():
-		print('\t' * indent + str(key))
-		if isinstance(value, dict):
-			pretty(value, indent+1)
-		else:
-			print('\t' * (indent+1) + str(value))
-
 d = CAEN_DT5742_Digitizer(LinkNum=0)
-d.reset()
-
 print(d.idn)
 
+# Digitizer configuration ---
 d.set_sampling_frequency(MHz=5000)
 d.set_record_length(1024)
-d.set_max_num_events_BLT(1)
+d.set_max_num_events_BLT(4) # 2 events per call to `d.get_waveforms`.
 d.set_acquisition_mode('sw_controlled')
 d.set_ext_trigger_input_mode('disabled')
-# ~ d.write_register(0x811C, 0x000D0001) # Enable busy signal on GPO.
+d.write_register(0x811C, 0x000D0001) # Enable busy signal on GPO.
 d.set_fast_trigger_mode(enabled=True)
 d.set_fast_trigger_digitizing(enabled=True)
-d.enable_channels(group_1=True, group_2=True)
+d.enable_channels(group_1=True, group_2=False)
 for ch in [0,1]:
 	d.set_trigger_polarity(channel=ch, edge='rising')
 d.set_fast_trigger_DC_offset(32768)
 d.set_fast_trigger_threshold(24000)
 d.set_post_trigger_size(30)
 
+# Data acquisition ---
 with d:
 	waveforms = d.get_waveforms() # Acquire the data.
-	
+
+# Data analysis and plotting ---
+if len(waveforms) == 0:
+	raise RuntimeError('Could not acquire any event. The reason may be that you dont have anything connected to the inputs of the digitizer, or a wrong trigger threshold and/or offset setting.')
+
 data = []
 for n_event in waveforms:
 	for n_channel in waveforms[n_event]:
@@ -44,13 +39,16 @@ for n_event in waveforms:
 		df.set_index(['n_event','n_channel'], inplace=True)
 		data.append(df)
 data = pandas.concat(data)
+
+print('Acquired data is:')
 print(data)
+
 fig = px.line(
 	data_frame = data.reset_index(),
 	x = 'Time (s)',
 	y = 'Amplitude (V)',
 	color = 'n_channel',
-	facet_row = 'n_event',
+	facet_col = 'n_event',
 	markers = True,
 )
 fig.write_html('plot.html')

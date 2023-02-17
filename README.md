@@ -10,6 +10,8 @@ pip install git+https://github.com/SengerM/CAENpy
 
 ## Usage
 
+Examples can be found in the [examples directory](examples).
+
 ### CAEN power supply
 
 ![Picture of a CAEN power supply](https://www.caen.it/wp-content/uploads/2017/10/DT1471HET_g.jpg)

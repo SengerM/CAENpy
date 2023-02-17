@@ -107,7 +107,7 @@ class CAEN_DT5742_Digitizer:
 	# That's it, you don't need to take care of anything else.
 	"""
 	
-	def __init__(self, LinkNum:int):
+	def __init__(self, LinkNum:int, reset_upon_connection:bool=True):
 		"""Creates an instance of CAEN_DT5742_Digitizer. Upon creation
 		this method also establishes the connection with the digitizer
 		(so you don't need to call anything like `digitizer.connect()` or
@@ -124,6 +124,11 @@ class CAEN_DT5742_Digitizer:
 			connect the cable to the device; it is 0 for the first device, 
 			1 for the second, and so on. There is not a fixed correspondence
 			between the USB port and link number'.
+		reset_upon_connection: bool, default True
+			Specifies whether to reset the digitizer after proper connection.
+			It is usually a good practice to do this, as then you start
+			to work with the instrument in a known and well defined
+			state to configure it.
 		"""
 		self._connected = False
 		self._LinkNum = LinkNum
@@ -143,6 +148,9 @@ class CAEN_DT5742_Digitizer:
 		model = self.get_info()['ModelName'].decode('utf8')
 		if model != 'DT5742':
 			raise RuntimeError(f'This class was designed to command a CAEN DT5742 digitizer, but instead now you are connected to a CAEN {model}. It may be possible that with a small adaption this code still works, but you have to take care of this...')
+		
+		if reset_upon_connection == True:
+			self.reset()
 	
 	@property
 	def idn(self):
@@ -300,6 +308,9 @@ class CAEN_DT5742_Digitizer:
 		
 		In essence, this is the number of events you will get each time
 		you call the method `get_waveforms`.
+		
+		This is a wrapper of the method `CAEN_DGTZ_SetMaxNumEventsBLT`
+		from the CAENDigitizer library.
 		"""
 		code = libCAENDigitizer.CAEN_DGTZ_SetMaxNumEventsBLT(
 			self._get_handle(),
