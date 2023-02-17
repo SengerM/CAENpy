@@ -451,6 +451,25 @@ class CAEN_DT5742_Digitizer:
 			c_uint32(percentage),
 		)
 		check_error_code(code)
+	
+	def get_post_trigger_size(self)->int:
+		"""Get the 'post trigger size', i.e. the position of the trigger
+		within the acquisition window.
+		
+		Returns
+		---------
+		percentage: int
+			Percentage of the record length. 0 % means that the trigger 
+			is at the end of the window, while 100 % means that it is at
+			the beginning.
+		"""
+		percentage = c_uint32()
+		code = libCAENDigitizer.CAEN_DGTZ_GetPostTriggerSize(
+			self._get_handle(), 
+			byref(percentage),
+		)
+		check_error_code(code)
+		return int(percentage.value)
 
 	def set_record_length(self, length:int):
 		"""Set how many samples should be taken for each event.
