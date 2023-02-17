@@ -390,20 +390,29 @@ class CAEN_DT5742_Digitizer:
 		)
 		check_error_code(code)
 
-	def set_fast_trigger_DC_offset(self, offset:int):
+	def set_fast_trigger_DC_offset(self, DAC:int=None, V:float=None):
 		"""Set the DC offset for the trigger channel TRn.
 		
 		Arguments
 		---------
-		offset: int
+		DAC: int
 			Value for the offset, in ADC units between 0 and 2**16-1 (65535).
+		V: float
+			Value for the offset in units of volt, between -1 and +1.
 		"""
-		if not isinstance(offset, int) or not 0 <= offset < 2**16:
-			raise ValueError(f'`offset` must be an integer number between 0 and 2**16-1.')
+		if (DAC is None and V is None) or (DAC is not None and V is not None):
+			raise ValueError(f'Both `DAC` and `V` are empty or were provided. You must provide one and only one of them.')
+		if DAC is not None:
+			if not isinstance(DAC, int) or not 0 <= DAC < 2**16:
+				raise ValueError(f'`DAC` must be an integer number between 0 and 2**16-1.')
+		if V is not None:
+			if not isinstance(V, (int,float)) or not -1 <= V <= 1:
+				raise ValueError('`V` must be a float between -1 and 1.')
+			DAC = int((V+1)/2*(2**16-1))
 		code = libCAENDigitizer.CAEN_DGTZ_SetGroupFastTriggerDCOffset(
 			self._get_handle(), 
 			c_uint32(0), # This is for the 'group', not sure what it is but it is always 0 for us.
-			c_uint32(offset)
+			c_uint32(DAC)
 		)
 		check_error_code(code)
 
