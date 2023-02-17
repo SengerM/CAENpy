@@ -73,7 +73,58 @@ class EventInfo(Structure):
 		("TriggerTimeTag", c_uint32)]
 
 class CAEN_DT5742_Digitizer:
+	"""A class designed to interface with CAEN DT5742 digitizers in an
+	easy and Pythonic way.
+	
+	Usage example
+	-------------
+	```
+	digitizer = CAEN_DT5742_Digitizer(0) # Open the connection.
+	
+	# Now configure the digitizer:
+	digitizer.set_sampling_frequency(5000) # Set to 5 GHz.
+	digitizer.set_max_num_events_BLT(1) # One event per call to `digitizer.get_waveforms`.
+	# More configuration here...
+	
+	# Now enter into acquisition mode using the `with` statement:
+	with digitizer:
+		waveforms = digitizer.get_waveforms()
+	# The `with` statement takes care of initializing and closing the
+	# acquisition, as well as all the ugly stuff required for this to 
+	# happen.
+	# You can now acquire again with a new `with` block:
+	with digitizer:
+		new_waveforms = digitizer.get_waveforms()
+	# and you can as well keep the acquisition running while you do
+	# other things:
+	with digitizer:
+		waveforms = []
+		for voltage in [0,100,200]:
+			voltage_source.set_voltage(voltage)
+			wf = digitizer.get_waveforms()
+			waveforms.append(wf)
+	```
+	# That's it, you don't need to take care of anything else.
+	"""
+	
 	def __init__(self, LinkNum:int):
+		"""Creates an instance of CAEN_DT5742_Digitizer. Upon creation
+		this method also establishes the connection with the digitizer
+		(so you don't need to call anything like `digitizer.connect()` or
+		whatever) and it also checks that the digitizer model is specifically
+		DT5742, otherwise it rises a `RuntimeError`. This means that if
+		the object was created, the digitizer should be ready to start
+		operating it.
+		
+		Arguments
+		---------
+		LinkNum: int
+			According to the documentation of the official CAENDigitizer
+			library: 'the link numbers are assigned by the PC when you 
+			connect the cable to the device; it is 0 for the first device, 
+			1 for the second, and so on. There is not a fixed correspondence
+			between the USB port and link number'.
+		"""
 		self._connected = False
 		self._LinkNum = LinkNum
 		self.__handle = c_int() # Handle object, keep track of our connection.
@@ -143,7 +194,8 @@ class CAEN_DT5742_Digitizer:
 	
 	def _get_handle(self):
 		"""Get the connection handle in a safe way no matter the connection
-		status."""
+		status. If the connection is not open, this method raises a 
+		`RuntimeError`."""
 		if self._connected == True:
 			return self.__handle
 		else:
@@ -245,8 +297,10 @@ class CAEN_DT5742_Digitizer:
 		is 1023. It's recommended to set it to the maximum allowed value 
 		and continuously poll the digitizer for new data. Binary transfer
 		is fast while a full buffer means the digitizer	will discard events.
-		"""
 		
+		In essence, this is the number of events you will get each time
+		you call the method `get_waveforms`.
+		"""
 		code = libCAENDigitizer.CAEN_DGTZ_SetMaxNumEventsBLT(
 			self._get_handle(),
 			c_uint32(numEvents)
