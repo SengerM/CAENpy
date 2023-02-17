@@ -697,10 +697,10 @@ class CAEN_DT5742_Digitizer:
 		waveforms: dict
 			A nested dictionary of the form:
 			```
-			waveforms[n_event][n_channel][variable]
+			waveforms[n_event][channel_name][variable]
 			```
 			where `n_event` is an integer denoting the event number, 
-			`n_channel` is an integer denoting the number of channel and
+			`channel_name` is a string denoting the channel and
 			`variable` is either `'Time (s)'` or `'Amplitude (V)'`.
 		"""
 		MAX_ADC = 2**12-1 # It is a 12 bit ADC.
@@ -741,7 +741,15 @@ class CAEN_DT5742_Digitizer:
 				if get_time:
 					wf['Time (s)'] = time_array
 				
-				event_waveforms[n_channel] = wf
+				if n_channel in {0,1,2,3,4,5,6,7}:
+					channel_name = f'CH{n_channel}'
+				elif n_channel in {9,10,11,12,13,14,15,16}:
+					channel_name = f'CH{n_channel-1}'
+				elif n_channel in {8,17}:
+					channel_name = f'trigger_group_{int((n_channel-8)/9)}'
+				else:
+					raise RuntimeError('Cannot determine channel name.')
+				event_waveforms[channel_name] = wf
 			waveforms[n_event] = event_waveforms
 		return waveforms
 	
