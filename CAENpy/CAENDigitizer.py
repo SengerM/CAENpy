@@ -171,6 +171,7 @@ class CAEN_DT5742_Digitizer:
 		self._allocateEvent()
 		self._mallocBuffer()
 		self._start_acquisition()
+		self.get_acquisition_status() # This makes it work better, specifically when the `with` statement is within a loop; without this it fails and cannot get the data after the first iteration. It is as if it needs an extra delay.
 
 	def __exit__(self, exc_type, exc_val, exc_tb):
 		self._stop_acquisition()
