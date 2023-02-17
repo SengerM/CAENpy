@@ -73,6 +73,8 @@ Once you have everything set up, you can easily control your digitizer:
 from CAENpy.CAENDigitizer import CAEN_DT5742_Digitizer
 
 digitizer = CAEN_DT5742_Digitizer(0) # Open the connection.
+
+print(digitizer.idn) # Print general info about the digitizer.
 	
 # Now configure the digitizer:
 digitizer.set_sampling_frequency(5000) # Set to 5 GHz.
