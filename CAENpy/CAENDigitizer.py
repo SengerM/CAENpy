@@ -372,6 +372,17 @@ class CAEN_DT5742_Digitizer:
 			c_long(0 if enabled == False else 1)
 		)
 		check_error_code(code)
+	
+	def get_fast_trigger_mode(self):
+		"""Get the status (enabled or disabled) of the TRn as the local 
+		trigger in the x742 series."""
+		status = c_long()
+		code = libCAENDigitizer.CAEN_DGTZ_GetFastTriggerMode(
+			self._get_handle(), 
+			byref(status)
+		)
+		check_error_code(code)
+		return int(status.value) == 1
 
 	def set_fast_trigger_digitizing(self, enabled:bool):
 		"""Regarding the x742 series, enables/disables (set) the presence
@@ -709,6 +720,13 @@ class CAEN_DT5742_Digitizer:
 		"""Reads all the data from the digitizer into the computer and parses
 		it, returning a human friendly data structure with the waveforms.
 		
+		Note: The time array is produced in such a way that t=0 is the 
+		trigger time. So far I have only implemented this for the so called
+		'fast trigger', other options will have a time axis with an arbitrary
+		origin. Note also that even for the fast trigger the jitter
+		is quite high (at least for the highest sampling frequency) so
+		it may be off. Refer to the digitizer's user manual for more details.
+		
 		Arguments
 		---------
 		get_time: bool, default True
@@ -758,9 +776,15 @@ class CAEN_DT5742_Digitizer:
 				
 				if 'time_array' not in locals(): # They all have the same time array, so only generate it once.
 					time_array = numpy.array(range(waveform_length))/sampling_frequency
+					post_trigger_size = self.get_post_trigger_size()
+					if self.get_fast_trigger_mode() == True:
+						trigger_latency = 42e-9 # This comes from the user manual, see § 9.8.3 of 'UM4270_DT5742_UserManual_rev11.pdf'.
+					else:
+						trigger_latency = 0 # Unknown value, cannot use NaN as it would destroy all the time array.
+					time_array -= time_array.max()*(100-post_trigger_size)/100 - trigger_latency
 				
 				samples = numpy.array([float(block.DataChannel[n_channel_within_group][_]) for _ in range(waveform_length)])
-				samples[(samples<1)|(samples>MAX_ADC-1)] = float('NaN') # These values denote ADC overflow, thus it is safe to replace them with NaN so they don't go unnoticed.
+				samples[(samples<1)|(samples>MAX_ADC-1)] = float('NaN') # These values denote ADC overflow, thus it is safer to replace them with NaN so they don't go unnoticed.
 				
 				wf = {}
 				if get_ADCu_instead_of_volts == False:
