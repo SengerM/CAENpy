@@ -770,6 +770,11 @@ class CAEN_DT5742_Digitizer:
 		PEAK_TO_PEAK_DINAMIC_RANGE = 1 # Volt.
 		VALID_CHANNELS_NAMES = {f'CH{_}' for _ in range(15)}.union({'trigger_group_0','trigger_group_1'})
 		
+		if not isinstance(channels, (list,set,tuple)):
+			raise TypeError(f'`channels` must be a list, a set or a tuple. Received object of type {type(channels)}. ')
+		if any([not isinstance(_, int) or not 0<=_<=15 for _ in channels]):
+			raise ValueError(f'Each element of `channels` must be an integer number between 0 and 15. At least one of the values is wrong, I received `channels={channels}`. ')
+			
 		self._ReadData() # Bring data from digitizer to PC.
 		
 		return_data_from_channels = {f'CH{_}' for _ in channels}
@@ -789,7 +794,22 @@ class CAEN_DT5742_Digitizer:
 				n_group = int(n_channel / 9)
 				if event.GrPresent[n_group] != 1:
 					continue # If this group was disabled then skip it
-
+				
+				# Check if this channel is needed by the user... If not we skip it to not waste time and resources.
+				if n_channel in {0,1,2,3,4,5,6,7}:
+					channel_name = f'CH{n_channel}'
+				elif n_channel in {9,10,11,12,13,14,15,16}:
+					channel_name = f'CH{n_channel-1}'
+				elif n_channel in {8,17}:
+					channel_name = f'trigger_group_{int((n_channel-8)/9)}'
+				else:
+					raise RuntimeError('Cannot determine channel name.')
+				if channel_name not in VALID_CHANNELS_NAMES: # This should never happen in normal operation, but if in the future some other channel name is implemented this is a safety check.
+					raise RuntimeError(f'Channel name {repr(channel_name)} is not a valid channel name, which are {VALID_CHANNELS_NAMES}. ')
+				if channel_name not in return_data_from_channels:
+					continue
+				
+				# Convert the data for this channel into something Python-friendly.
 				n_channel_within_group = n_channel - (9 * n_group)
 				block = event.DataGroup[n_group]
 				waveform_length = block.ChSize[n_channel_within_group]
@@ -814,18 +834,6 @@ class CAEN_DT5742_Digitizer:
 				if get_time:
 					wf['Time (s)'] = time_array
 				
-				if n_channel in {0,1,2,3,4,5,6,7}:
-					channel_name = f'CH{n_channel}'
-				elif n_channel in {9,10,11,12,13,14,15,16}:
-					channel_name = f'CH{n_channel-1}'
-				elif n_channel in {8,17}:
-					channel_name = f'trigger_group_{int((n_channel-8)/9)}'
-				else:
-					raise RuntimeError('Cannot determine channel name.')
-				if channel_name not in VALID_CHANNELS_NAMES: # This should never happen in normal operation, but if in the future some other channel name is implemented this is a safety check.
-					raise RuntimeError(f'Channel name {repr(channel_name)} is not a valid channel name, which are {VALID_CHANNELS_NAMES}. ')
-				if channel_name not in return_data_from_channels:
-					continue
 				event_waveforms[channel_name] = wf
 			waveforms[n_event] = event_waveforms
 		return waveforms
