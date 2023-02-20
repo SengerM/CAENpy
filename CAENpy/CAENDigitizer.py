@@ -404,6 +404,9 @@ class CAEN_DT5742_Digitizer:
 	def set_fast_trigger_DC_offset(self, DAC:int=None, V:float=None):
 		"""Set the DC offset for the trigger channel TRn.
 		
+		Note: Arguments `DAC` and `V` are to be used separately, either
+		one or the other but not both.
+		
 		Arguments
 		---------
 		DAC: int
@@ -580,28 +583,39 @@ class CAEN_DT5742_Digitizer:
 		)
 		check_error_code(code)
 
-	def set_channel_DC_offset(self, channel:int, offset:int):
+	def set_channel_DC_offset(self, channel:int, DAC:int=None, V:float=None):
 		"""
 		Set the DC offset for a channel.
+		
+		Note: Arguments `DAC` and `V` are to be used separately, either
+		one or the other but not both.
+		
 		Arguments
 		---------
 		channel: int
 			Number of the channel to set the offset.
-		offset: int
+		DAC: int
 			Value for the offset, in ADC units between 0 and 2**16-1 (65535).
+		V: float
+			Value for the offset in units of volt, between -1 and +1.
 		"""
-		if not isinstance(offset, int) or not 0 <= offset < 2**16:
-			raise ValueError(f'`offset` must be an integer number between 0 and 2**16-1.')
-		if not isinstance(channel, int) or not 0 <= channel < 16:
-			raise ValueError(f'`channel` must be 0, 1, ..., 15, received {repr(channel)}. ')
+		if (DAC is None and V is None) or (DAC is not None and V is not None):
+			raise ValueError(f'Both `DAC` and `V` are empty or were provided. You must provide one and only one of them.')
+		if DAC is not None:
+			if not isinstance(DAC, int) or not 0 <= DAC < 2**16:
+				raise ValueError(f'`DAC` must be an integer number between 0 and 2**16-1.')
+		if V is not None:
+			if not isinstance(V, (int,float)) or not -1 <= V <= 1:
+				raise ValueError('`V` must be a float between -1 and 1.')
+			DAC = int((V+1)/2*(2**16-1))
 		code = libCAENDigitizer.CAEN_DGTZ_SetChannelDCOffset(
 			self._get_handle(), 
 			c_uint32(channel), 
-			c_uint32(offset),
+			c_uint32(DAC),
 		)
 		check_error_code(code)
 
-	def get_channel_DC_offset(self, channel):
+	def get_channel_DC_offset(self, channel)->int:
 		"""Get the DC offset value for a channel.
 		
 		Arguments
@@ -716,7 +730,7 @@ class CAEN_DT5742_Digitizer:
 			code = libCAENDigitizer.CAEN_DGTZ_DisableDRS4Correction(self._get_handle())
 		check_error_code(code)
 	
-	def get_waveforms(self, get_time:bool=True, get_ADCu_instead_of_volts:bool=False):
+	def get_waveforms(self, get_time:bool=True, get_ADCu_instead_of_volts:bool=False, channels:set={_ for _ in range(16)}):
 		"""Reads all the data from the digitizer into the computer and parses
 		it, returning a human friendly data structure with the waveforms.
 		
@@ -737,8 +751,10 @@ class CAEN_DT5742_Digitizer:
 		get_ADCu_instead_of_volts: bool, default False
 			If `True` the `'Amplitude (V)'` component in the returned 
 			`waveforms` dict is replaced by an array containing the samples
-			in ADC units (i.e. 0, 1, ..., 2**N_BITS-1).
-		
+			in ADC units (i.e. 0, 1, ..., 2**N_BITS-1) and called 
+			`'Amplitude (ADCu)'`.
+		channels: set, list, tuple of it, default {0,1,...,15}
+			Specifies for which channel numbers to return the data.		
 		Returns
 		-------
 		waveforms: dict
@@ -752,8 +768,12 @@ class CAEN_DT5742_Digitizer:
 		"""
 		MAX_ADC = 2**12-1 # It is a 12 bit ADC.
 		PEAK_TO_PEAK_DINAMIC_RANGE = 1 # Volt.
+		VALID_CHANNELS_NAMES = {f'CH{_}' for _ in range(15)}.union({'trigger_group_0','trigger_group_1'})
 		
 		self._ReadData() # Bring data from digitizer to PC.
+		
+		return_data_from_channels = {f'CH{_}' for _ in channels}
+		return_data_from_channels = return_data_from_channels.union({'trigger_group_0','trigger_group_1'})
 		
 		# Convert the data into something human friendly for the user, i.e. all the ugly stuff is happening below...
 		n_events = self._GetNumEvents()
@@ -802,6 +822,10 @@ class CAEN_DT5742_Digitizer:
 					channel_name = f'trigger_group_{int((n_channel-8)/9)}'
 				else:
 					raise RuntimeError('Cannot determine channel name.')
+				if channel_name not in VALID_CHANNELS_NAMES: # This should never happen in normal operation, but if in the future some other channel name is implemented this is a safety check.
+					raise RuntimeError(f'Channel name {repr(channel_name)} is not a valid channel name, which are {VALID_CHANNELS_NAMES}. ')
+				if channel_name not in return_data_from_channels:
+					continue
 				event_waveforms[channel_name] = wf
 			waveforms[n_event] = event_waveforms
 		return waveforms
