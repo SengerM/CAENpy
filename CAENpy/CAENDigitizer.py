@@ -838,6 +838,45 @@ class CAEN_DT5742_Digitizer:
 			waveforms[n_event] = event_waveforms
 		return waveforms
 	
+	def wait_for(self, at_least_one_event:bool, memory_full:bool=False, timeout_seconds:float=None):
+		"""Halts the execution of the program until any of the conditions 
+		is met. Note that this means that as soon as any of the conditions
+		is met, the execution will continue.
+		
+		Arguments
+		---------
+		at_least_one_event: bool
+			Specifies whether to un-halt the execution when at least one event
+			is present in the digitizer's memory.
+		memory_full: bool, dafault False
+			Specifies whether to un-halt the execution then the memory of
+			the digitizer is full.
+		timeout_seconds: float, default None
+			Timeout in seconds before un-halting even if no condition is
+			met. `None` means to halt forever.
+		"""
+		if not isinstance(at_least_one_event, bool):
+			raise TypeError(f'`at_least_one_event` must be an instance of {repr(bool)}, received an object of type {repr(type(at_least_one_event))}. ')
+		if not isinstance(memory_full, bool):
+			raise TypeError(f'`memory_full` must be an instance of {repr(bool)}, received an object of type {repr(type(memory_full))}. ')
+		if timeout_seconds is not None:
+			if not isinstance(timeout_seconds, (float,int)):
+				raise TypeError(f'`timeout_seconds` must be an instance of {repr(float)}, received object of type {repr(type(timeout_seconds))}. ')
+			if 0>timeout_seconds:
+				raise ValueError(f'`timeout_seconds` must be greater than zero, received {timeout_seconds}. ')
+		else:
+			timeout_seconds = 1e99
+		began = time.time()
+		while True:
+			if time.time()-began > timeout_seconds:
+				break
+			status = self.get_acquisition_status()
+			if at_least_one_event==True and status['at least one event available for readout']:
+				break
+			if memory_full==True and status['events memory is full']:
+				break
+			time.sleep(.1)
+
 def __init__():
 	functions = [
 		libCAENDigitizer.CAEN_DGTZ_OpenDigitizer,
