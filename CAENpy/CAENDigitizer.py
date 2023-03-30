@@ -179,17 +179,13 @@ class CAEN_DT5742_Digitizer:
 		if DRS4_correction == True:
 			self._LoadDRS4CorrectionData(MHz=self.get_sampling_frequency())
 		self._DRS4_correction(enable=DRS4_correction)
-		self._allocateEvent()
-		self._mallocBuffer()
 		self._start_acquisition()
-		self.get_acquisition_status() # This makes it work better, specifically when the `with` statement is within a loop; without this it fails and cannot get the data after the first iteration. It is as if it needs an extra delay.
+		self.get_acquisition_status() # This makes it work better. Don't know why.
 	
 	def stop_acquisition(self):
 		"""Stops the acquisition and cleans the memory used by the `libCAENDigitizer`
 		library to read out the instrument."""
 		self._stop_acquisition()
-		self._freeEvent()
-		self._freeBuffer()
 	
 	def __enter__(self):
 		self.start_acquisition()
@@ -793,7 +789,10 @@ class CAEN_DT5742_Digitizer:
 			raise TypeError(f'`channels` must be a list, a set or a tuple. Received object of type {type(channels)}. ')
 		if any([not isinstance(_, int) or not 0<=_<=15 for _ in channels]):
 			raise ValueError(f'Each element of `channels` must be an integer number between 0 and 15. At least one of the values is wrong, I received `channels={channels}`. ')
-			
+		
+		self._allocateEvent()
+		self._mallocBuffer()
+		
 		self._ReadData() # Bring data from digitizer to PC.
 		
 		return_data_from_channels = {f'CH{_}' for _ in channels}
@@ -855,6 +854,10 @@ class CAEN_DT5742_Digitizer:
 				
 				event_waveforms[channel_name] = wf
 			waveforms[n_event] = event_waveforms
+		
+		self._freeEvent()
+		self._freeBuffer()
+		
 		return waveforms
 	
 	def wait_for(self, at_least_one_event:bool, memory_full:bool=False, timeout_seconds:float=None):
