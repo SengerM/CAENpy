@@ -163,20 +163,39 @@ class CAEN_DT5742_Digitizer:
 			self._idn = f'CAEN {model} digitizer, serial number {serial_number}'
 		return self._idn
 	
-	def __enter__(self):
+	def start_acquisition(self, DRS4_correction:bool=True):
+		"""Puts the device into acquisition mode and runs all the required
+		configurations of the `libCAENDigitizer` so the data can be read
+		out from the digitizer.
+		
+		Arguments
+		---------
+		DRS4_correction: bool, default True
+			Specifies whether to apply the DRS4 correction. I don't see
+			a reason why not to use it, but anyway...
+		"""
 		if self.get_acquisition_status()['acquiring now'] == True:
 			raise RuntimeError(f'The digitizer is already acquiring, cannot start a new acquisition.')
-		self._LoadDRS4CorrectionData(MHz=self.get_sampling_frequency())
-		self._DRS4_correction(enable=True)
+		if DRS4_correction == True:
+			self._LoadDRS4CorrectionData(MHz=self.get_sampling_frequency())
+		self._DRS4_correction(enable=DRS4_correction)
 		self._allocateEvent()
 		self._mallocBuffer()
 		self._start_acquisition()
 		self.get_acquisition_status() # This makes it work better, specifically when the `with` statement is within a loop; without this it fails and cannot get the data after the first iteration. It is as if it needs an extra delay.
-
-	def __exit__(self, exc_type, exc_val, exc_tb):
+	
+	def stop_acquisition(self):
+		"""Stops the acquisition and cleans the memory used by the `libCAENDigitizer`
+		library to read out the instrument."""
 		self._stop_acquisition()
 		self._freeEvent()
 		self._freeBuffer()
+	
+	def __enter__(self):
+		self.start_acquisition()
+
+	def __exit__(self, exc_type, exc_val, exc_tb):
+		self.stop_acquisition()
 	
 	def __del__(self):
 		self._close()
