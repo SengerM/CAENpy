@@ -768,7 +768,7 @@ class CAEN_DT5742_Digitizer:
 		"""
 		MAX_ADC = 2**12-1 # It is a 12 bit ADC.
 		PEAK_TO_PEAK_DINAMIC_RANGE = 1 # Volt.
-		VALID_CHANNELS_NAMES = {f'CH{_}' for _ in range(15)}.union({'trigger_group_0','trigger_group_1'})
+		VALID_CHANNELS_NAMES = {f'CH{_}' for _ in range(16)}.union({'trigger_group_0','trigger_group_1'})
 		
 		if not isinstance(channels, (list,set,tuple)):
 			raise TypeError(f'`channels` must be a list, a set or a tuple. Received object of type {type(channels)}. ')
