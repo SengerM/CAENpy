@@ -146,7 +146,7 @@ class CAEN_DT5742_Digitizer:
 		self._open() # Open the connection to the digitizer.
 		
 		model = self.get_info()['ModelName'].decode('utf8')
-		if model != 'DT5742':
+		if 'DT5742' not in model:
 			raise RuntimeError(f'This class was designed to command a CAEN DT5742 digitizer, but instead now you are connected to a CAEN {model}. It may be possible that with a small adaption this code still works, but you have to take care of this...')
 		
 		if reset_upon_connection == True:
