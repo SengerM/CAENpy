@@ -94,10 +94,21 @@ with digitizer:
 	new_waveforms = digitizer.get_waveforms()
 # and you can as well keep the acquisition running while you do
 # other things:
-with digitizer:
+with digitizer: # This takes care of starting and stopping the digitizer automatically.
 	waveforms = []
 	for voltage in [0,100,200]:
 		voltage_source.set_voltage(voltage)
 		wf = digitizer.get_waveforms()
 		waveforms.append(wf)
 ```
+
+You can also manually start and stop the digitizer:
+
+```python
+digitizer.start_acquisition()
+time.sleep(.5) # Wait some time for the digitizer to trigger.
+digitizer.stop_acquisition()
+waveforms = digitizer.get_waveforms() # Acquire the data.
+```
+
+Further usage examples can be found in [examples](examples).

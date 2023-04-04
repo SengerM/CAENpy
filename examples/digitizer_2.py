@@ -12,7 +12,7 @@ if __name__ == '__main__':
 
 	# Data acquisition ---
 	d.start_acquisition()
-	time.sleep(.5)
+	time.sleep(.5) # Wait some time for the digitizer to trigger.
 	d.stop_acquisition()
 	waveforms = d.get_waveforms(get_ADCu_instead_of_volts=False) # Acquire the data.
 
