@@ -772,13 +772,12 @@ class CAEN_DT5742_Digitizer:
 			Specifies for which channel numbers to return the data.		
 		Returns
 		-------
-		waveforms: dict
-			A nested dictionary of the form:
+		waveforms: list of dict
+			A list of dictionaries of the form:
 			```
-			waveforms[n_event][channel_name][variable]
+			single_event_waveforms[channel_name][variable]
 			```
-			where `n_event` is an integer denoting the event number, 
-			`channel_name` is a string denoting the channel and
+			where `channel_name` is a string denoting the channel and
 			`variable` is either `'Time (s)'` or `'Amplitude (V)'`.
 		"""
 		MAX_ADC = 2**12-1 # It is a 12 bit ADC.
@@ -800,7 +799,7 @@ class CAEN_DT5742_Digitizer:
 		
 		# Convert the data into something human friendly for the user, i.e. all the ugly stuff is happening below...
 		n_events = self._GetNumEvents()
-		waveforms = {}
+		waveforms = []
 		sampling_frequency = self.get_sampling_frequency()*1e6
 		for n_event in range(n_events):
 			self._GetEventInfo(n_event)
@@ -853,7 +852,7 @@ class CAEN_DT5742_Digitizer:
 					wf['Time (s)'] = time_array
 				
 				event_waveforms[channel_name] = wf
-			waveforms[n_event] = event_waveforms
+			waveforms.append(event_waveforms)
 		
 		self._freeEvent()
 		self._freeBuffer()
