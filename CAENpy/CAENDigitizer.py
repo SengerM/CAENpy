@@ -768,7 +768,7 @@ class CAEN_DT5742_Digitizer:
 			`waveforms` dict is replaced by an array containing the samples
 			in ADC units (i.e. 0, 1, ..., 2**N_BITS-1) and called 
 			`'Amplitude (ADCu)'`.
-		channels: set, list, tuple of it, default {0,1,...,15}
+		channels: set, list, tuple of int, default {0,1,...,15}
 			Specifies for which channel numbers to return the data.		
 		Returns
 		-------
@@ -778,7 +778,11 @@ class CAEN_DT5742_Digitizer:
 			single_event_waveforms[channel_name][variable]
 			```
 			where `channel_name` is a string denoting the channel and
-			`variable` is either `'Time (s)'` or `'Amplitude (V)'`.
+			`variable` is either `'Time (s)'` or `'Amplitude (V)'`. The
+			`channel_name` takes values in `'CH0'`, `'CH1'`, ..., `'CH15'`
+			and additionally `'trigger_group_0'` and `'trigger_group_1'`
+			if the digitization of the trigger is enabled. In such case
+			it is automatically added in the return dictionaries.
 		"""
 		MAX_ADC = 2**12-1 # It is a 12 bit ADC.
 		PEAK_TO_PEAK_DINAMIC_RANGE = 1 # Volt.
