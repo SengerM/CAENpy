@@ -194,7 +194,7 @@ class CAEN_DT5742_Digitizer:
 		self.stop_acquisition()
 	
 	def __del__(self):
-		self._close()
+		self.close()
 	
 	def _open(self):
 		"""Open the connection to the digitizer."""
@@ -209,7 +209,7 @@ class CAEN_DT5742_Digitizer:
 			check_error_code(code)
 			self._connected = True
 	
-	def _close(self):
+	def close(self):
 		"""Close the connection with the digitizer."""
 		if self._connected == True:
 			code = libCAENDigitizer.CAEN_DGTZ_CloseDigitizer(self.__handle) # Most of the times this line produces a `Segmentation fault (core dumped)`...
