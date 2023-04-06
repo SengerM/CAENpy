@@ -63,7 +63,7 @@ caen.set_single_channel_parameter(parameter='OFF', channel=0, value=None)
 
 ### CAEN digitizer
 
-![Picture of the DT5742 digitizer](https://www.caen.it/wp-content/uploads/2017/10/DT5742S_caen-1.jpg)
+![Picture of the DT5742 digitizer](https://caen.it/wp-content/uploads/2017/10/DT5742S_featured.jpg)
 
 **Note 1** To control these digitizers you first have to install the [CAENDigitizer](https://www.caen.it/products/caendigitizer-library/) library. You can test the installation of such library using the [CAEN Wavedump](https://www.caen.it/products/caen-wavedump/) software. Once that is running, now *CAENpy* should be able to work as well.
 
