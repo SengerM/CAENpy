@@ -355,10 +355,6 @@ class CAEN_DT5742_Digitizer:
 			}
 			```
 		"""
-		# Wait - read - wait - read to clear registers and get digitizer's status. Funny but works.
-		time.sleep(0.3)
-		self.read_register(0x8104)
-		time.sleep(0.2)
 		acquisition_status_register = self.read_register(0x8104)
 		return {
 			'acquisition_status_register': acquisition_status_register,
