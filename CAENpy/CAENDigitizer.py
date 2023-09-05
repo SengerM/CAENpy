@@ -575,6 +575,16 @@ class CAEN_DT5742_Digitizer:
 		check_error_code(code)
 		return {code: MHz for MHz,code in CAEN_DGTZ_DRS4Frequency_MEGA_HERTZ.items()}[int(freq.value)]
 	
+	def get_record_length(self) -> int:
+		"""Returns the record length."""
+		record_length = c_long()
+		code = libCAENDigitizer.CAEN_DGTZ_GetRecordLength(
+			self._get_handle(),
+			byref(record_length),
+		)
+		check_error_code(code)
+		return record_length
+	
 	def enable_channels(self, group_1:bool, group_2:bool):
 		"""Set which groups to enable and/or disable.
 		
