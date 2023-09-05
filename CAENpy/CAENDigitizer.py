@@ -583,7 +583,7 @@ class CAEN_DT5742_Digitizer:
 			byref(record_length),
 		)
 		check_error_code(code)
-		return record_length
+		return int(record_length.value)
 	
 	def enable_channels(self, group_1:bool, group_2:bool):
 		"""Set which groups to enable and/or disable.
