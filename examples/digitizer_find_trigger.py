@@ -21,7 +21,7 @@ def interlaced(lst):
 if __name__ == '__main__':
 	import time
 	
-	TIME_WINDOW_SECONDS = 11
+	TIME_WINDOW_SECONDS = 1
 	OFILENAME = 'deleteme.csv'
 	
 	d = CAEN_DT5742_Digitizer(LinkNum=0)
@@ -33,7 +33,7 @@ if __name__ == '__main__':
 
 	with open(OFILENAME, 'w') as ofile:
 		print(f'fast_trigger_threshold,n_triggers_in_{TIME_WINDOW_SECONDS}_seconds', file=ofile)
-	for threshold in interlaced(range(26300,26800)):
+	for threshold in interlaced(range(0,2**16-1)):
 		d.set_fast_trigger_threshold(threshold)
 		with d:
 			time.sleep(TIME_WINDOW_SECONDS) # Give some time to record some triggers.
