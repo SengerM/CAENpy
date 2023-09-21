@@ -27,8 +27,8 @@ import time
 caen = CAENDesktopHighVoltagePowerSupply(ip='130.60.165.238', timeout=10) # Increase timeout for slow networks.
 # caen = CAENDesktopHighVoltagePowerSupply(port='/dev/ttyACM0') # You can also connect via USB (name of port changes in different operating systems, check the user manual of your device).
 
-# Check that the connection was successful: 
-print(f'Model: {caen.model_name}, serial #: {caen.serial_number}') # Print model name and serial number, example: 'Model: DT1470ET, serial #: 13398'.
+# Check that the connection was successful:
+print(caen.idn) # Prints 'CAEN DT1470ET, SN:13398'
 
 caen.set_single_channel_parameter(parameter='ON', channel=0, value=None)
 for v in range(22):
@@ -60,6 +60,32 @@ for v in range(22):
 	print(f'VMON = {caen.get_single_channel_parameter(parameter="VMON", channel=0)} | IMON = {caen.get_single_channel_parameter(parameter="IMON", channel=0)}')
 caen.set_single_channel_parameter(parameter='OFF', channel=0, value=None)
 ```
+
+You can also make use of the `OneCAENChannel` class to treat each channel of the power supply as an independent Python object. Example:
+```python
+from CAENpy.CAENDesktopHighVoltagePowerSupply import CAENDesktopHighVoltagePowerSupply, OneCAENChannel
+
+caen = CAENDesktopHighVoltagePowerSupply(ip='130.60.165.238')
+print(caen.idn) # Just checking that the connection was successful...
+
+# Now create 4 independent power supplies, one for each channel:
+HV0 = OneCAENChannel(caen=caen, channel_number=0)
+HV1 = OneCAENChannel(caen=caen, channel_number=1)
+HV2 = OneCAENChannel(caen=caen, channel_number=2)
+HV3 = OneCAENChannel(caen=caen, channel_number=3)
+
+# Now handle them even easier than before:
+for n_channel,source in {0:HV0, 1:HV1, 2:HV2, 3:HV3}.items():
+	source.ramp_voltage(voltage=99, ramp_speed_VperSec=5) # Ramp voltage and freeze program execution until finished.
+	print(f'Set voltage channel {n_channel}: {source.V_set} V')
+	print(f'Measured voltage channel {n_channel}: {source.V_mon} V')
+	print(f'Set current channel {n_channel}: {source.I_set} A')
+	print(f'Measured current channel {n_channel}: {source.I_mon} A')
+	source.V_set = 0 # Set the voltage to 0 without freezing program flow, voltage will ramp according to the settings in the CAEN, which of course you can change remotely using CAENpy as well.
+```
+
+For more insights on how to use it, go through [the source code](https://github.com/SengerM/CAENpy/blob/main/CAENpy/CAENDesktopHighVoltagePowerSupply.py) which was written in a (hopefully) self explanatory way.
+
 
 ### CAEN digitizer
 
