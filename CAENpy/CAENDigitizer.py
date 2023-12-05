@@ -850,7 +850,7 @@ class CAEN_DT5742_Digitizer:
 						trigger_latency = 0 # Unknown value, cannot use NaN as it would destroy all the time array.
 					time_array -= time_array.max()*(100-post_trigger_size)/100 - trigger_latency
 				
-				samples = numpy.array([float(block.DataChannel[n_channel_within_group][_]) for _ in range(waveform_length)])
+				samples = numpy.array(block.DataChannel[n_channel_within_group][0:waveform_length])
 				samples[(samples<1)|(samples>MAX_ADC-1)] = float('NaN') # These values denote ADC overflow, thus it is safer to replace them with NaN so they don't go unnoticed.
 				
 				wf = {}
