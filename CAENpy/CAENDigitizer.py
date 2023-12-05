@@ -792,7 +792,6 @@ class CAEN_DT5742_Digitizer:
 		"""
 		MAX_ADC = 2**12-1 # It is a 12 bit ADC.
 		PEAK_TO_PEAK_DINAMIC_RANGE = 1 # Volt.
-		VALID_CHANNELS_NAMES = {f'CH{_}' for _ in range(16)}.union({'trigger_group_0','trigger_group_1'})
 		
 		if not isinstance(channels, (list,set,tuple)):
 			raise TypeError(f'`channels` must be a list, a set or a tuple. Received object of type {type(channels)}. ')
@@ -806,6 +805,8 @@ class CAEN_DT5742_Digitizer:
 		
 		return_data_from_channels = {f'CH{_}' for _ in channels}
 		return_data_from_channels = return_data_from_channels.union({'trigger_group_0','trigger_group_1'})
+		
+		CHANNELS_NAMES = tuple([f'CH{n}' for n in [0,1,2,3,4,5,6,7]] + ['trigger_group_0'] + [f'CH{n-1}' for n in [9,10,11,12,13,14,15,16]] + ['trigger_group_1']) # Human friendly names.
 		
 		# Convert the data into something human friendly for the user, i.e. all the ugly stuff is happening below...
 		n_events = self._GetNumEvents()
@@ -822,17 +823,7 @@ class CAEN_DT5742_Digitizer:
 				if event.GrPresent[n_group] != 1:
 					continue # If this group was disabled then skip it
 				
-				# Check if this channel is needed by the user... If not we skip it to not waste time and resources.
-				if n_channel in {0,1,2,3,4,5,6,7}:
-					channel_name = f'CH{n_channel}'
-				elif n_channel in {9,10,11,12,13,14,15,16}:
-					channel_name = f'CH{n_channel-1}'
-				elif n_channel in {8,17}:
-					channel_name = f'trigger_group_{int((n_channel-8)/9)}'
-				else:
-					raise RuntimeError('Cannot determine channel name.')
-				if channel_name not in VALID_CHANNELS_NAMES: # This should never happen in normal operation, but if in the future some other channel name is implemented this is a safety check.
-					raise RuntimeError(f'Channel name {repr(channel_name)} is not a valid channel name, which are {VALID_CHANNELS_NAMES}. ')
+				channel_name = CHANNELS_NAMES[n_channel]
 				if channel_name not in return_data_from_channels:
 					continue
 				
