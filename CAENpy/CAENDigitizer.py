@@ -50,7 +50,7 @@ class BoardInfo(Structure):
 		("VMEHandle", c_int),
 		("License", c_char*999),
 	]
-	
+
 class Group(Structure):
 	_fields_ = [
 		("ChSize", c_uint32*9),
@@ -71,6 +71,113 @@ class EventInfo(Structure):
 		("ChannelMask", c_uint32),
 		("EventCounter", c_uint32),
 		("TriggerTimeTag", c_uint32)]
+
+def decode_event_waveforms_to_python_friendly_stuff(event:Event, ADC_peak_to_peak_dynamic_range_volts:float=None, time_axis_parameters:dict=None, ADC_dynamic_range_margin:int=77):
+	"""Decode the waveforms contained in an `Event` object into human friendly
+	pythonic objects.
+	
+	Arguments
+	---------
+	event: Event
+		The event object to be decoded.
+	ADC_peak_to_peak_dynamic_range_volts: `float`, default `None`
+		The dynamic range of the ADC to be used to convert to volts. If 
+		`None` (default) then the values are not converted to volts.
+	time_axis_parameters: `dict`, default `None`
+		A dictionary of the form
+		```
+		dict(
+			post_trigger_size: int,
+			fast_trigger_mode: bool,
+			sampling_frequency_Hz: float,
+		)
+		```
+		to reconstruct the time axis for the waveforms. Each of the parameters
+		in this dictionary is related to the configuration of the digitizer.
+		If `None` then no time axis is reconstructed, i.e. the waveforms
+		are returned without a time array, only the samples.
+	ADC_dynamic_range_margin: int, default `55`
+		Samples that are in `0+ADC_dynamic_range_margin` or in `MAX_ADC-ADC_dynamic_range_margin`
+		will be replaced by NaN values, to indicate ADC overflow. Setting 
+		this to 0 will disable this feature.
+	
+	Returns
+	-------
+	event_waveforms: dict
+		A dictionary with the waveforms as numpy arrays, example:
+		```
+		{
+			'CH0': {
+				'Amplitude (V)': array([0.01965812, 0.01965812, 0.01966247, ..., 0.01651428, 0.01672277, 0.01527676]), 
+				'Time (s)': array([-1.626e-07, -1.624e-07, -1.622e-07, ...,  4.160e-08,  4.180e-08, 4.200e-08])
+			}, 
+			'CH1': {
+				'Amplitude (V)': array([0.00500611, 0.00500611, 0.00501475, ..., 0.00524261, 0.00525031, 0.00428298]), 
+				'Time (s)': array([-1.626e-07, -1.624e-07, -1.622e-07, ...,  4.160e-08,  4.180e-08, 4.200e-08])
+			}, 
+			
+			CH2, CH3, etc...,
+			
+			'trigger_group_0': {
+				'Amplitude (V)': array([0.03015873, 0.03015873, 0.03015009, ..., 0.025542  , 0.02599743, 0.0255237 ]), 
+				'Time (s)': array([-1.626e-07, -1.624e-07, -1.622e-07, ...,  4.160e-08,  4.180e-08, 4.200e-08])
+			},
+			'trigger_group_1': {
+				'Amplitude (V)': array([0.03235653, 0.03235767, 0.032594  , ..., 0.02868429, 0.02772543, 0.02747378]), 
+				'Time (s)': array([-1.626e-07, -1.624e-07, -1.622e-07, ...,  4.160e-08,  4.180e-08, 4.200e-08])
+			}
+		}
+		```
+	"""
+	CHANNELS_NAMES = tuple([f'CH{n}' for n in [0,1,2,3,4,5,6,7]] + ['trigger_group_0'] + [f'CH{n-1}' for n in [9,10,11,12,13,14,15,16]] + ['trigger_group_1']) # Human friendly names.
+	MAX_ADC = 2**12-1 # It is a 12 bit ADC.
+	
+	event_waveforms = {}
+	for n_channel in range(18):
+		n_group = int(n_channel / 9)
+		if event.GrPresent[n_group] != 1:
+			continue # If this group was disabled then skip it
+		
+		channel_name = CHANNELS_NAMES[n_channel]
+		
+		# Convert the data for this channel into something Python-friendly.
+		n_channel_within_group = n_channel - (9 * n_group)
+		block = event.DataGroup[n_group]
+		waveform_length = block.ChSize[n_channel_within_group]
+		
+		if time_axis_parameters is not None and 'time_array' not in locals():
+			sampling_frequency = time_axis_parameters['sampling_frequency']
+			post_trigger_size = time_axis_parameters['post_trigger_size']
+			fast_trigger_mode = time_axis_parameters['fast_trigger_mode']
+			if not isinstance(sampling_frequency, (int, float)):
+				raise TypeError(f'Sampling frequency must be a float, received object of type {type(sampling_frequency)}. ')
+			if not isinstance(post_trigger_size, int):
+				raise TypeError(f'post_trigger_size must be an integer number, received object of type {type(post_trigger_size)}. ')
+			if not isinstance(fast_trigger_mode, bool):
+				raise TypeError(f'fast_trigger_mode must be a boolean, received object of type {type(fast_trigger_mode)}. ')
+			
+			time_array = numpy.array(range(waveform_length))/sampling_frequency
+			if fast_trigger_mode == True:
+				trigger_latency = 42e-9 # This comes from the user manual, see § 9.8.3 of 'UM4270_DT5742_UserManual_rev11.pdf'.
+			else:
+				trigger_latency = 0 # Unknown value, cannot use NaN as it would destroy all the time array.
+			time_array -= time_array.max()*(100-post_trigger_size)/100 - trigger_latency
+		
+		samples = numpy.array(block.DataChannel[n_channel_within_group][0:waveform_length])
+		samples[(samples<ADC_dynamic_range_margin)|(samples>MAX_ADC-ADC_dynamic_range_margin)] = float('NaN') # These values are considered as ADC overflow, thus it is safer to replace them with NaN so they don't go unnoticed.
+		
+		wf = {}
+		if ADC_peak_to_peak_dynamic_range_volts is not None:
+			if not isinstance(ADC_peak_to_peak_dynamic_range_volts, (int,float)):
+				raise TypeError(f'`ADC_peak_to_peak_dynamic_range_volts` must be a float or integer number, received object of type {type(ADC_peak_to_peak_dynamic_range_volts)}. ')
+			wf['Amplitude (V)'] = (samples-MAX_ADC/2)*ADC_peak_to_peak_dynamic_range_volts/MAX_ADC
+		else:
+			wf['Amplitude (ADCu)'] = samples
+		if time_axis_parameters is not None:
+			wf['Time (s)'] = time_array
+		
+		event_waveforms[channel_name] = wf
+	return event_waveforms
 
 class CAEN_DT5742_Digitizer:
 	"""A class designed to interface with CAEN DT5742 digitizers in an
@@ -751,7 +858,7 @@ class CAEN_DT5742_Digitizer:
 			code = libCAENDigitizer.CAEN_DGTZ_DisableDRS4Correction(self._get_handle())
 		check_error_code(code)
 	
-	def get_waveforms(self, get_time:bool=True, get_ADCu_instead_of_volts:bool=False, channels:set={_ for _ in range(16)}):
+	def get_waveforms(self, get_time:bool=True, get_ADCu_instead_of_volts:bool=False):
 		"""Reads all the data from the digitizer into the computer and parses
 		it, returning a human friendly data structure with the waveforms.
 		
@@ -774,12 +881,11 @@ class CAEN_DT5742_Digitizer:
 			`waveforms` dict is replaced by an array containing the samples
 			in ADC units (i.e. 0, 1, ..., 2**N_BITS-1) and called 
 			`'Amplitude (ADCu)'`.
-		channels: set, list, tuple of int, default {0,1,...,15}
-			Specifies for which channel numbers to return the data.		
+		
 		Returns
 		-------
-		waveforms: list of dict
-			A list of dictionaries of the form:
+		events: list of dict
+			A list of dictionaries with the waveforms, of the form:
 			```
 			single_event_waveforms[channel_name][variable]
 			```
@@ -790,75 +896,36 @@ class CAEN_DT5742_Digitizer:
 			if the digitization of the trigger is enabled. In such case
 			it is automatically added in the return dictionaries.
 		"""
-		MAX_ADC = 2**12-1 # It is a 12 bit ADC.
-		PEAK_TO_PEAK_DINAMIC_RANGE = 1 # Volt.
-		
-		if not isinstance(channels, (list,set,tuple)):
-			raise TypeError(f'`channels` must be a list, a set or a tuple. Received object of type {type(channels)}. ')
-		if any([not isinstance(_, int) or not 0<=_<=15 for _ in channels]):
-			raise ValueError(f'Each element of `channels` must be an integer number between 0 and 15. At least one of the values is wrong, I received `channels={channels}`. ')
 		
 		self._allocateEvent()
 		self._mallocBuffer()
 		
 		self._ReadData() # Bring data from digitizer to PC.
 		
-		return_data_from_channels = {f'CH{_}' for _ in channels}
-		return_data_from_channels = return_data_from_channels.union({'trigger_group_0','trigger_group_1'})
-		
-		CHANNELS_NAMES = tuple([f'CH{n}' for n in [0,1,2,3,4,5,6,7]] + ['trigger_group_0'] + [f'CH{n-1}' for n in [9,10,11,12,13,14,15,16]] + ['trigger_group_1']) # Human friendly names.
-		
 		# Convert the data into something human friendly for the user, i.e. all the ugly stuff is happening below...
 		n_events = self._GetNumEvents()
-		waveforms = []
-		sampling_frequency = self.get_sampling_frequency()*1e6
+		events = []
+		pointer_to_event = POINTER(Event)()
 		for n_event in range(n_events):
-			self._GetEventInfo(n_event)
-			self._DecodeEvent()
-			event = self.eventObject.contents
+			self._GetEventInfo(n_event) # Put the "header info" of event number `n_event` inside `self.eventInfo`, which was created in the `__init__` method.
+			self._DecodeEvent() # Decode the event whose info was get by the previous line, and place the decoded event info in `self.eventObject`, which was created in the `__init__` method.
+			event = self.eventObject.contents # The decoded event. Unfortunately, this still has lots of pointers to the temporary buffer so it is not persistent, we cannot return this. And I still don't know how to properly create a copy of this into my own memory block without processing each waveform individually.
 			
-			event_waveforms = {}
-			for n_channel in range(18):
-				n_group = int(n_channel / 9)
-				if event.GrPresent[n_group] != 1:
-					continue # If this group was disabled then skip it
-				
-				channel_name = CHANNELS_NAMES[n_channel]
-				if channel_name not in return_data_from_channels:
-					continue
-				
-				# Convert the data for this channel into something Python-friendly.
-				n_channel_within_group = n_channel - (9 * n_group)
-				block = event.DataGroup[n_group]
-				waveform_length = block.ChSize[n_channel_within_group]
-				
-				if 'time_array' not in locals(): # They all have the same time array, so only generate it once.
-					time_array = numpy.array(range(waveform_length))/sampling_frequency
-					post_trigger_size = self.get_post_trigger_size()
-					if self.get_fast_trigger_mode() == True:
-						trigger_latency = 42e-9 # This comes from the user manual, see § 9.8.3 of 'UM4270_DT5742_UserManual_rev11.pdf'.
-					else:
-						trigger_latency = 0 # Unknown value, cannot use NaN as it would destroy all the time array.
-					time_array -= time_array.max()*(100-post_trigger_size)/100 - trigger_latency
-				
-				samples = numpy.array(block.DataChannel[n_channel_within_group][0:waveform_length])
-				samples[(samples<1)|(samples>MAX_ADC-1)] = float('NaN') # These values denote ADC overflow, thus it is safer to replace them with NaN so they don't go unnoticed.
-				
-				wf = {}
-				if get_ADCu_instead_of_volts == False:
-					wf['Amplitude (V)'] = (samples-MAX_ADC/2)*PEAK_TO_PEAK_DINAMIC_RANGE/MAX_ADC
-				else:
-					wf['Amplitude (ADCu)'] = samples
-				if get_time:
-					wf['Time (s)'] = time_array
-				
-				event_waveforms[channel_name] = wf
-			waveforms.append(event_waveforms)
+			event_waveforms = decode_event_waveforms_to_python_friendly_stuff(
+				event,
+				ADC_peak_to_peak_dynamic_range_volts = 1 if get_ADCu_instead_of_volts==False else None,
+				time_axis_parameters = dict(
+					sampling_frequency = self.get_sampling_frequency()*1e6,
+					post_trigger_size = self.get_post_trigger_size(),
+					fast_trigger_mode = self.get_fast_trigger_mode(),
+				) if get_time else None,
+			)
+			events.append(event_waveforms)
 		
 		self._freeEvent()
 		self._freeBuffer()
 		
-		return waveforms
+		return events
 	
 	def wait_for(self, at_least_one_event:bool, memory_full:bool=False, timeout_seconds:float=None):
 		"""Halts the execution of the program until any of the conditions 
