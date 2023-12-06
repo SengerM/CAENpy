@@ -2,19 +2,24 @@ from CAENpy.CAENDigitizer import CAEN_DT5742_Digitizer
 import pandas
 import plotly.express as px
 import time
-from digitizer import configure_digitizer, convert_dicitonaries_to_data_frame
+from digitizer_example_1 import configure_digitizer, convert_dicitonaries_to_data_frame
+from pathlib import Path
 
 if __name__ == '__main__':
 	d = CAEN_DT5742_Digitizer(LinkNum=0)
 	print('Connected with:',d.idn)
 
 	configure_digitizer(d)
+	d.set_max_num_events_BLT(3) # Override the maximum number of events to be stored in the digitizer's self buffer.
 
 	# Data acquisition ---
-	d.start_acquisition()
-	time.sleep(.5) # Wait some time for the digitizer to trigger.
-	d.stop_acquisition()
-	waveforms = d.get_waveforms(get_ADCu_instead_of_volts=False) # Acquire the data.
+	with d:
+		print(f'Digitizer is enabled! Waiting 1 second for it to trigger...')
+		time.sleep(1) # Wait some time for the digitizer to trigger.
+	# At this point there should be 3 events in the digitizer (provided at least 3 trigger signals went into the trigger input).
+	
+	print(f'Reading data from the digitizer...')
+	waveforms = d.get_waveforms()
 
 	# Data analysis and plotting ---
 	if len(waveforms) == 0:
@@ -34,4 +39,6 @@ if __name__ == '__main__':
 		facet_row = 'n_event',
 		markers = True,
 	)
-	fig.write_html(f'plot.html')
+	path_to_plot = (Path(__file__).parent/'plot.html').resolve()
+	fig.write_html(path_to_plot, include_plotlyjs='cdn')
+	print(f'A plot with the waveforms can be found in {path_to_plot}')
