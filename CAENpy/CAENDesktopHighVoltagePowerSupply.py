@@ -235,6 +235,10 @@ class OneCAENChannel:
 		self._channel_number = channel_number
 		self._device = device
 	
+	@property
+	def idn(self):
+		return f'{self._caen.idn}, CH{self._channel_number}'
+	
 	def set(self, PAR, VAL):
 		VALID_PARs = {'VSET','ISET','MAXV','RUP','RDW','TRIP','PDWN','IMRANGE','ON','OFF','ZCADJ'}
 		if PAR not in VALID_PARs:
