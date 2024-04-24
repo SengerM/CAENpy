@@ -44,7 +44,7 @@ def _validate_numeric_type(variable, variable_name, variable_numeric_type):
 	return variable
 
 class CAENDesktopHighVoltagePowerSupply:
-	# This class was implemented according to the specifications in the 
+	# This class was implemented according to the specifications in the
 	# user manual here: https://www.caen.it/products/dt1470et/
 	# The implementation in this class should be thread safe.
 	def __init__(self, port=None, ip=None, default_BD0=True, timeout=1):
@@ -52,7 +52,7 @@ class CAENDesktopHighVoltagePowerSupply:
 		if default_BD0 not in [True, False]:
 			raise ValueError(f'The argument <default_BD0> must be either True of False. Received {default_BD0}.')
 		self.default_BD0 = default_BD0
-		
+
 		if ip is not None and port is not None: # This is an error, which connection protocol should we use?
 			raise ValueError(f'You have specified both <port> and <ip>. Please specify only one of them to use.')
 		elif ip is not None and port is None: # Connect via Ethernet.
@@ -72,9 +72,9 @@ class CAENDesktopHighVoltagePowerSupply:
 			)
 		else: # Both <port> and <ip> are none...
 			raise ValueError(f'Please specify a serial port or an IP addres in which the CAEN device can be found.')
-		
+
 		self._communication_lock = RLock() # To make a thread safe implementation.
-	
+
 	def send_command(self, CMD, PAR, CH=None, VAL=None, BD=None):
 		# Send a command to the CAEN device. The parameters of this method are the ones specified in the user manual.
 		if BD is None:
@@ -91,7 +91,7 @@ class CAENDesktopHighVoltagePowerSupply:
 				self.socket.sendall(bytes2send)
 		else:
 			raise RuntimeError(f'There is no serial or Ethernet communication.')
-	
+
 	def read_response(self):
 		# Reads the answer from the CAEN device.
 		if hasattr(self, 'serial_port'): # This means that we are talking through the serial port.
@@ -103,14 +103,14 @@ class CAENDesktopHighVoltagePowerSupply:
 		else:
 			raise RuntimeError(f'There is no serial or Ethernet communication.')
 		return received_bytes.decode('ASCII').replace('\n','').replace('\r','') # Remove the annoying '\r\n' in the end and convert into a string.
-	
+
 	def query(self, CMD, PAR, CH=None, VAL=None, BD=None):
 		# Sends a command and reads the answer.
 		with self._communication_lock: # Lock it to ensure that the answer I return corresponds to this command. Otherwise another thread could send a new command between my send and my read.
 			self.send_command(BD=BD, CMD=CMD, PAR=PAR, CH=CH, VAL=VAL)
 			response = self.read_response()
 		return response
-	
+
 	def get_single_channel_parameter(self, parameter: str, channel: int, device: int=None):
 		# Gets the current value of some parameter (see "MONITOR commands related to the Channels" in the CAEN user manual.)
 		# parameter: This is the <whatever> value in "PAR:whatever" that is specified in the user manual.
@@ -127,7 +127,7 @@ class CAENDesktopHighVoltagePowerSupply:
 		except:
 			pass
 		return parameter_value
-	
+
 	def set_single_channel_parameter(self, parameter: str, channel: int, value, device: int=None):
 		# Sets the value of some parameter (see "SET commands related to the Channels" in the CAEN user manual.)
 		# parameter: This is the <whatever> value in "PAR:whatever" that is specified in the user manual.
@@ -136,7 +136,7 @@ class CAENDesktopHighVoltagePowerSupply:
 		response = self.query(CMD='SET', PAR=parameter, CH=channel, BD=device, VAL=value)
 		if check_successful_response(response) == False:
 			raise RuntimeError(f'Error trying to set the parameter {parameter}. The response from the instrument is: "{response}"')
-	
+
 	def ramp_voltage(self, voltage: float, channel: int, device: int = None, ramp_speed_VperSec: float = 5, timeout: float = 10):
 		# Blocks the execution until the ramp is completed.
 		# timeout: It is the number of seconds to wait until the VMON (measured voltage) is stable. After this number of seconds, an error will be raised because the voltage cannot stabilize.
@@ -146,7 +146,7 @@ class CAENDesktopHighVoltagePowerSupply:
 		channel = _validate_numeric_type(channel, 'channel', int)
 		if device is not None:
 			device = _validate_numeric_type(device, 'device', int)
-		
+
 		current_ramp_speed_settings = {}
 		for par in ['RUP', 'RDW']:
 			current_ramp_speed_settings[par] = self.get_single_channel_parameter(parameter=par, channel=channel, device=device)
@@ -179,7 +179,7 @@ class CAENDesktopHighVoltagePowerSupply:
 					device = device,
 					value = current_ramp_speed_settings[par],
 				)
-	
+
 	def channel_status(self, channel: int, device: int=None):
 		"""Returns the information from the status byte for the specified
 		channel. Returns a dictionary containint the status byte and also
@@ -204,7 +204,7 @@ class CAENDesktopHighVoltagePowerSupply:
 				raise RuntimeError(f'The instument responded with error: {response}.')
 			self._model_name = response.split('VAL:')[-1]
 		return self._model_name
-	
+
 	@property
 	def serial_number(self):
 		if not hasattr(self, '_serial_number'):
@@ -213,7 +213,7 @@ class CAENDesktopHighVoltagePowerSupply:
 				raise RuntimeError(f'The instument responded with error: {response}.')
 			self._serial_number = response.split('VAL:')[-1]
 		return self._serial_number
-	
+
 	@property
 	def idn(self) -> str:
 		"""Returns a string with information about the device identity."""
@@ -222,6 +222,24 @@ class CAENDesktopHighVoltagePowerSupply:
 			serial_number = self.serial_number
 			self._idn = f'CAEN {name}, SN:{serial_number}'
 		return self._idn
+
+	@property
+	def channels_count(self) -> int:
+		"""Return the number of channels available in the power supply."""
+		if not hasattr(self, '_channels_count'):
+			response = self.query(CMD='MON', PAR='BDNCH')
+			if check_successful_response(response) == False:
+				raise RuntimeError(f'The instument responded with error: {response}.')
+			self._channels_count = int(response.split('VAL:')[-1])
+		return self._channels_count
+
+	@property
+	def channels(self):
+		"""Returns a list with `OneCAENChannel` objects to individually handle
+		each channel in a more convenient way."""
+		if not hasattr(self, '_channels'):
+			self._channels = [OneCAENChannel(self, n) for n in range(self.channels_count)]
+		return self._channels
 
 class OneCAENChannel:
 	def __init__(self, caen, channel_number, device: int=None):
@@ -234,28 +252,28 @@ class OneCAENChannel:
 		self._caen = caen
 		self._channel_number = channel_number
 		self._device = device
-	
+
 	@property
 	def idn(self):
 		return f'{self._caen.idn}, CH{self._channel_number}'
-	
+
 	def set(self, PAR, VAL):
 		VALID_PARs = {'VSET','ISET','MAXV','RUP','RDW','TRIP','PDWN','IMRANGE','ON','OFF','ZCADJ'}
 		if PAR not in VALID_PARs:
 			raise ValueError(f'<PAR> must be one of {VALID_PARs}. Refer to the user manual of the CAEN power supply for more information.')
 		self._caen.set_single_channel_parameter(parameter=PAR, value=VAL, channel=self.channel_number, device=self._device)
-	
+
 	def get(self, PAR):
 		return self._caen.get_single_channel_parameter(parameter=PAR, channel=self.channel_number, device=self._device)
-	
+
 	@property
 	def belongs_to(self):
 		return f'CAEN model {self._caen.model_name}, serial number {self._caen.serial_number}'
-	
+
 	@property
 	def channel_number(self):
 		return self._channel_number
-	
+
 	@property
 	def V_mon(self):
 		channel_polarity = self.polarity
@@ -266,11 +284,11 @@ class OneCAENChannel:
 		else:
 			raise RuntimeError(f'Unexpected polarity response from the insturment. I was expecting one of {{"+","-"}} but received instead {channel_polarity}.')
 		return polarity*self.get(PAR='VMON')
-	
+
 	@property
 	def I_mon(self):
 		return 1e-6*self.get(PAR='IMON')
-	
+
 	@property
 	def V_set(self):
 		return self.get('VSET')
@@ -278,11 +296,11 @@ class OneCAENChannel:
 	def V_set(self, voltage):
 		_validate_numeric_type(voltage,'voltage',float)
 		self.set(PAR='VSET',VAL=voltage)
-	
+
 	@property
 	def polarity(self):
 		return self.get(PAR='POL')
-	
+
 	@property
 	def status_byte(self):
 		return self._caen.channel_status(channel=self.channel_number, device=self._device)['status byte']
@@ -292,7 +310,7 @@ class OneCAENChannel:
 	@property
 	def there_was_overcurrent(self):
 		return self._caen.channel_status(channel=self.channel_number, device=self._device)['there was overcurrent']=='yes'
-	
+
 	@property
 	def output(self):
 		return self._caen.channel_status(channel=self.channel_number, device=self._device)['output']
@@ -306,7 +324,7 @@ class OneCAENChannel:
 			self.set(PAR='ON',VAL=0)
 		else:
 			self.set(PAR='OFF',VAL=0)
-	
+
 	@property
 	def current_compliance(self):
 		return self.get('ISET')*1e-6
@@ -314,16 +332,16 @@ class OneCAENChannel:
 	def current_compliance(self, amperes):
 		_validate_numeric_type(amperes, 'amperes', float)
 		self.set(PAR='ISET',VAL=1e6*amperes)
-	
+
 	def ramp_voltage(self, voltage, ramp_speed_VperSec: float = 5, timeout: float = 10):
 		_validate_numeric_type(voltage, 'voltage', float)
 		_validate_numeric_type(ramp_speed_VperSec, 'ramp_speed_VperSec', float)
 		_validate_numeric_type(timeout, 'timeout', float)
 		self._caen.ramp_voltage(voltage=voltage, channel=self.channel_number, device = self._device, ramp_speed_VperSec = ramp_speed_VperSec, timeout = timeout)
-	
+
 	def __str__(self):
 		return f'Channel {self.channel_number} of {self.belongs_to}'
-	
+
 	def __repr__(self):
 		return f'<{str(type(self))[1:-1]}, {self}>'
-		
+
